@@ -26,11 +26,12 @@ func (b *NcbiBlastpCommandline) Execute() (err error) {
 	}
 	if commandArray != nil {
 		cmd := exec.Command(commandArray[0], commandArray[1:]...)
-		log.Println(cmd.Args)
+		log.Printf("Started: Performing Blast (%v)", b.Query)
 		err := cmd.Run()
 		if err != nil {
 			return err
 		}
+		log.Printf("Finished: Performing Blast (%v)", b.Query)
 	} else {
 		return errors.New("text: need parameters")
 	}

@@ -4,6 +4,8 @@ import (
 	"github.com/noatgnu/ancestral/blastwrapper"
 	"errors"
 	"strconv"
+	"os/exec"
+	"log"
 )
 
 type PhyMLCommandline struct {
@@ -17,6 +19,16 @@ type PhyMLCommandline struct {
 }
 
 func (p *PhyMLCommandline) Execute() (err error) {
+	commandArray, err := p.CommandBuild()
+	if err !=nil {
+		return err
+	}
+	if commandArray !=nil {
+		cmd := exec.Command(commandArray[0], commandArray[1:]...)
+		log.Printf("Started: Creating Phylogenetic Tree (%v)", p.In)
+		cmd.Run()
+		log.Printf("Finished: Creating Phylogenetic Tree (%v)", p.In)
+	}
 	return err
 }
 

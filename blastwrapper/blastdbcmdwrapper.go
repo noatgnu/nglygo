@@ -28,9 +28,9 @@ func (b *BlastDBCMDCommandline) Execute() (err error) {
 		cmd := exec.Command(commandArray[0], commandArray[1:]...)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
-		log.Println(cmd.Args)
+		log.Printf("Started: Getting Fasta sequences (%v)", b.In)
 		cmd.Run()
-
+		log.Printf("Finished: Getting Fasta sequences (%v)", b.In)
 	} else {
 		return errors.New("text: need parameters")
 	}

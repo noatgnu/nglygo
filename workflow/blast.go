@@ -138,7 +138,6 @@ func QCFmt6Query(filename string, db string, outFilename string) {
 }
 
 func BlastFmt6Parser(filename string, outDirectory string, db string, organisms []string, queryMap map[string]int, filtered chan BlastMap) {
-	AccMap := make(map[string][]string)
 	fmt6Chan := make(chan fmt6Query)
 	BlastDBCMDChan := make(chan BlastDBCMDResult)
 	f, err := os.Open(filename)
@@ -156,7 +155,6 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 			if err != nil {
 				if err == io.EOF {
 					if fmt6q.Query != "" {
-						log.Println(fmt6q.Query)
 						fmt6Chan <- fmt6q
 					}
 					break
@@ -166,18 +164,12 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 
 			if fmt6q.Query != r[0] {
 				if fmt6q.Query != "" {
-					log.Println(fmt6q.Query)
 					fmt6Chan <- fmt6q
 				}
 				fmt6q.Query = r[0]
 				fmt6q.Matches = []string{}
 			}
 			fmt6q.Matches = append(fmt6q.Matches, r[1])
-			if v, ok := AccMap[r[1]]; ok {
-				AccMap[r[1]] = append(v, r[0])
-			} else {
-				AccMap[r[1]] = []string{r[0]}
-			}
 		}
 		close(fmt6Chan)
 	} ()
@@ -186,18 +178,20 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 
 	go func () {
 		for fmt6 := range fmt6Chan {
-			compiledMatches := filepath.Join(outDirectory, strings.Replace(fmt6.Query, "|", "_", -1))
-			err = CreateMatchesFile(compiledMatches, fmt6)
+			folderName := strings.Replace(fmt6.Query, "|", "_", -1)
+			compiledMatches := filepath.Join(outDirectory, folderName)
+			os.MkdirAll(compiledMatches, os.ModePerm)
+			fName := filepath.Join(compiledMatches, "compiled.txt")
+			err = CreateMatchesFile(fName, fmt6)
 			if err != nil {
 				log.Panicln(err)
 			} else {
-				outName := compiledMatches+".fasta"
-				QCFmt6Query(compiledMatches, db, outName)
+				outName := strings.Replace(fName, "txt", "fasta", -1)
+				QCFmt6Query(fName, db, outName)
 				BlastDBCMDChan <- BlastDBCMDResult{fmt6.Query, queryMap[fmt6.Query], outName}
 			}
 		}
 	} ()
-	log.Println(organisms)
 
 	for bcmd := range BlastDBCMDChan {
 		FilterMatchFile(organisms, bcmd, filtered)
@@ -208,7 +202,7 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 
 func FilterMatchFile(organisms []string, query BlastDBCMDResult, filteredChan chan BlastMap) {
 	o := append([]string(nil), organisms...)
-	outFile := query.Filename+"_filtered"
+	outFile := strings.Replace(query.Filename, ".fasta", ".filtered.fasta", -1)
 	matchFile, err := os.Open(query.Filename)
 	if err != nil {
 		log.Panicln(err)
@@ -241,9 +235,10 @@ func FilterMatchFile(organisms []string, query BlastDBCMDResult, filteredChan ch
 		b.WriteString(p.Seq.ToString())
 		count++
 	}
-	log.Println(o)
 	if count >= 20 {
 		filteredChan <- result
+	} else {
+		log.Printf("Started: Not enough species (%v)", outFile)
 	}
 	defer b.Flush()
 }

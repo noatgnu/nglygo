@@ -22,8 +22,9 @@ func (c *ClustalOCommandline) Execute() (err error) {
 	}
 	if commandArray != nil {
 		cmd := exec.Command(commandArray[0], commandArray[1:]...)
-		log.Println(cmd.Args)
+		log.Printf("Started: Performing Clustal Omega Operation (%v)", c.In)
 		_ = cmd.Run()
+		log.Printf("Finished: Performing Clustal Omega Operation (%v)", c.In)
 	}
 	return err
 }
