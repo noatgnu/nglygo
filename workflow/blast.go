@@ -9,7 +9,26 @@ import (
 	"bufio"
 	"strings"
 	"path/filepath"
+	"strconv"
 )
+
+type BlastMap struct {
+	IdFullMap map[string]string
+	OrganismMap map[string]string
+	AccMap map[string]string
+	FileName string
+}
+
+type FilterResult struct {
+	Seq blastwrapper.PrimeSeq
+	Organism string
+}
+
+type BlastDBCMDResult struct {
+	Query string
+	QueryLength int
+	Filename string
+}
 
 type fmt6Query struct {
 	Query string
@@ -17,13 +36,57 @@ type fmt6Query struct {
 }
 var fmt6Column = []string{"qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"}
 
+func LoadQuery(filename string) map[string]int {
+	f, err := os.Open(filename)
+	if err != nil {
+		log.Panicln(err)
+	}
+	buff := bufio.NewReader(f)
+	q := make(chan blastwrapper.PrimeSeq)
+	s := blastwrapper.PrimeSeq{}
+	m := make(map[string]int)
+	go func() {
+		for {
+			r, err := buff.ReadString('\n')
+			if err != nil {
+				if err == io.EOF {
+					if s.Id != "" {
+						if blastwrapper.SeqQualityControl(s, true) {
+							q <- s
+						}
+					}
+					break
+				}
+				log.Panicln(err)
+			}
+			if strings.ContainsAny(r, ">") {
+				if s.Id != "" {
+					if blastwrapper.SeqQualityControl(s, true) {
+						q <- s
+					}
+				}
+				s = blastwrapper.PrimeSeq{}
+				s.Id = strings.TrimSpace(r)
+			} else {
+				s.Seq += strings.TrimSpace(r)
+			}
+		}
+		close(q)
+	}()
+	for r := range q {
+		id := strings.SplitN(r.Id, " ", 2)
+		m[strings.Replace(id[0], ">", "", 1)] = len(r.Seq)
+	}
+	return m
+}
+
 func BlastOffline(filename string, out string, dbname string) {
 	b := blastwrapper.NcbiBlastpCommandline{}
 	b.Command = `C:\Program Files\NCBI\blast-2.7.1+\bin\blastp.exe`
 	b.DB = dbname
 	b.Out = out
-	b.OutFmt = "6"
-	b.NumThreads = 4
+	b.OutFmt = "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore"
+	b.NumThreads = 7
 	b.EValue = 0.001
 	b.Query = filename
 	err := b.Execute()
@@ -47,23 +110,37 @@ func CreateMatchesFile(filename string, fmt6q fmt6Query) error {
 	return err
 }
 
-func QCFmt6Query(blastCmdChan chan string, db string) {
-	for b := range blastCmdChan {
-		bc := blastwrapper.BlastDBCMDCommandline{}
-		bc.Command = `C:\Program Files\NCBI\blast-2.7.1+\bin\blastdbcmd.exe`
-		bc.DB = db
-		bc.DBType = "prot"
-		bc.In = b
-		err := bc.Execute()
-		if err != nil {
-			log.Panicln(err)
-		}
+func CreateBlastDBCMDFile(filename string, c chan fmt6Query) {
+	outfile, err := os.Create(filename)
+	if err != nil {
+		log.Panicln(err)
+	}
+	defer outfile.Close()
+	writer := bufio.NewWriter(outfile)
+	defer writer.Flush()
+	for fmt6 := range c {
+		writer.WriteString(strings.Join(fmt6.Matches, "\n")+"\n")
+	}
+
+}
+
+func QCFmt6Query(filename string, db string, outFilename string) {
+	bc := blastwrapper.BlastDBCMDCommandline{}
+	bc.Command = `C:\Program Files\NCBI\blast-2.7.1+\bin\blastdbcmd.exe`
+	bc.DB = db
+	bc.DBType = "prot"
+	bc.In = filename
+	bc.Out = outFilename
+	err := bc.Execute()
+	if err != nil {
+		log.Panicln(err)
 	}
 }
 
-func BlastFmt6Parser(filename string, outDirectory string, db string) {
+func BlastFmt6Parser(filename string, outDirectory string, db string, organisms []string, queryMap map[string]int, filtered chan BlastMap) {
+	AccMap := make(map[string][]string)
 	fmt6Chan := make(chan fmt6Query)
-	blastCmdChan := make(chan string)
+	BlastDBCMDChan := make(chan BlastDBCMDResult)
 	f, err := os.Open(filename)
 	if err != nil {
 		log.Panicln(err)
@@ -78,35 +155,140 @@ func BlastFmt6Parser(filename string, outDirectory string, db string) {
 			r, err := c.Read()
 			if err != nil {
 				if err == io.EOF {
-					fmt6Chan <- fmt6q
+					if fmt6q.Query != "" {
+						log.Println(fmt6q.Query)
+						fmt6Chan <- fmt6q
+					}
 					break
 				}
 				log.Fatalln(err)
 			}
+
 			if fmt6q.Query != r[0] {
-				fmt6Chan <- fmt6q
+				if fmt6q.Query != "" {
+					log.Println(fmt6q.Query)
+					fmt6Chan <- fmt6q
+				}
 				fmt6q.Query = r[0]
 				fmt6q.Matches = []string{}
+			}
+			fmt6q.Matches = append(fmt6q.Matches, r[1])
+			if v, ok := AccMap[r[1]]; ok {
+				AccMap[r[1]] = append(v, r[0])
 			} else {
-				fmt6q.Matches = append(fmt6q.Matches, r[1])
+				AccMap[r[1]] = []string{r[0]}
 			}
 		}
 		close(fmt6Chan)
 	} ()
-	go func() {
+
+	//CreateBlastDBCMDFile(compiledMatches, fmt6Chan)
+
+	go func () {
 		for fmt6 := range fmt6Chan {
-			mFilename := filepath.Join(outDirectory, strings.Replace(fmt6.Query, "|", "_", -1))
-			err = CreateMatchesFile(mFilename, fmt6)
+			compiledMatches := filepath.Join(outDirectory, strings.Replace(fmt6.Query, "|", "_", -1))
+			err = CreateMatchesFile(compiledMatches, fmt6)
 			if err != nil {
 				log.Panicln(err)
 			} else {
-				blastCmdChan <- mFilename
+				outName := compiledMatches+".fasta"
+				QCFmt6Query(compiledMatches, db, outName)
+				BlastDBCMDChan <- BlastDBCMDResult{fmt6.Query, queryMap[fmt6.Query], outName}
 			}
 		}
-		close(blastCmdChan)
 	} ()
+	log.Println(organisms)
 
-	QCFmt6Query(blastCmdChan, db)
+	for bcmd := range BlastDBCMDChan {
+		FilterMatchFile(organisms, bcmd, filtered)
+	}
+	close(filtered)
+
+}
+
+func FilterMatchFile(organisms []string, query BlastDBCMDResult, filteredChan chan BlastMap) {
+	o := append([]string(nil), organisms...)
+	outFile := query.Filename+"_filtered"
+	matchFile, err := os.Open(query.Filename)
+	if err != nil {
+		log.Panicln(err)
+	}
+	defer matchFile.Close()
+	buff := bufio.NewReader(matchFile)
+	s := blastwrapper.PrimeSeq{}
+	c := make(chan FilterResult)
+	go ProcessOrganisms(buff, s, o, query.QueryLength, c)
+
+	filtered, err := os.Create(outFile)
+	if err != nil {
+		log.Panicln(err)
+	}
+	defer filtered.Close()
+	b := bufio.NewWriter(filtered)
+	count := 0
+	result := BlastMap{}
+	result.AccMap = make(map[string]string)
+	result.IdFullMap = make(map[string]string)
+	result.OrganismMap = make(map[string]string)
+	result.FileName = outFile
+	for p := range c {
+		numb := strconv.Itoa(count)
+		result.OrganismMap[numb] = p.Organism
+		id := strings.SplitN(p.Seq.Id, " ", 2)
+		result.IdFullMap[numb] = p.Seq.Id
+		result.AccMap[numb] = id[0]
+		p.Seq.Id = ">"+numb
+		b.WriteString(p.Seq.ToString())
+		count++
+	}
+	log.Println(o)
+	if count >= 20 {
+		filteredChan <- result
+	}
+	defer b.Flush()
+}
+func ProcessOrganisms(buff *bufio.Reader, s blastwrapper.PrimeSeq, organisms []string, queryLength int, c chan FilterResult) {
+	bound := queryLength*20/100
+	for {
+		r, err := buff.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				if s.Id != "" {
+					if blastwrapper.SeqQualityControl(s, true) {
+						check, left, found := blastwrapper.SeqFilterOrganism(s, organisms, true)
+						if check {
+							l := len(s.Seq)
+							if (queryLength - bound) <= l && l <= (queryLength + bound) {
+								c <- FilterResult{s, found}
+								organisms = left
+							}
+						}
+					}
+				}
+				break
+			}
+			log.Panicln(err)
+		}
+		if strings.ContainsAny(r, ">") {
+			if s.Id != "" {
+				if blastwrapper.SeqQualityControl(s, true) {
+					check, left, found := blastwrapper.SeqFilterOrganism(s, organisms, true)
+					if check {
+						l := len(s.Seq)
+						if (queryLength - bound) < l && l < (queryLength + bound) {
+							c <- FilterResult{s, found}
+							organisms = left
+						}
+					}
+				}
+			}
+			s = blastwrapper.PrimeSeq{}
+			s.Id = strings.TrimSpace(r)
+		} else {
+			s.Seq += strings.TrimSpace(r)
+		}
+	}
+	close(c)
 }
 
 /*

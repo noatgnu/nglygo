@@ -69,14 +69,19 @@ func FilterBlastDB(filename string, organisms []string, output string) {
 	defer writer.Flush()
 }
 
-func PreProcessDB(filename string, output string, speciesFilename string) {
-	f, _ := os.Open(speciesFilename)
+func GetSpeciesList(filename string) []string {
+	f, _ := os.Open(filename)
 	defer f.Close()
 	buff := bufio.NewScanner(f)
 	var organisms []string
 	for buff.Scan() {
 		organisms = append(organisms, strings.TrimSpace(buff.Text()))
 	}
+	return organisms
+}
+
+func PreProcessDB(filename string, output string, speciesFilename string) {
+	organisms := GetSpeciesList(speciesFilename)
 	log.Println("Started")
 	FilterBlastDB(`D:\python_projects\datahelper\ancestral_wf\nr`, organisms, output)
 }

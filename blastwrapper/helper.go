@@ -42,20 +42,25 @@ func SeqQualityControl(seq PrimeSeq, partialCheck bool) (quality bool) {
 	return true
 }
 
-func SeqFilterOrganism(seq PrimeSeq, organisms []string, removeFound bool) (check bool, organismLeft []string) {
+func SeqFilterOrganism(seq PrimeSeq, organisms []string, removeFound bool) (check bool, organismLeft []string, found string) {
 	org := OrgRegex.FindString(seq.Id)
 	if org != "" {
-		for i, v := range organisms {
+		for _, v := range organisms {
 			if strings.Contains(strings.ToLower(org), strings.ToLower(v)) {
 				if removeFound {
-					return true, append(organisms[:i], organisms[i+1:]...)
-				} else {
-					return true, organisms
+					var arr []string
+					for _, a := range organisms{
+						if a != v {
+							arr = append(arr, a)
+						}
+					}
+					return true, arr, v
 				}
+				return true, organisms, v
 			}
 		}
 	}
-	return false, nil
+	return false, nil, ""
 }
 
 func SeqFilterOrganismNoRegex(seq PrimeSeq, organisms []string) (check bool) {

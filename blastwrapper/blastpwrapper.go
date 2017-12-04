@@ -75,7 +75,7 @@ func (b *NcbiBlastpCommandline) CommandBuild() (commandArray []string, err error
 	if b.OutFmt != "" {
 		commandArray = append(commandArray, "-outfmt", b.OutFmt)
 	} else {
-		commandArray = append(commandArray, "-outfmt", "6")
+		commandArray = append(commandArray, "-outfmt", `"6 qseqid sgi sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore"`)
 	}
 	return commandArray, nil
 }
