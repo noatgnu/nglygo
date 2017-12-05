@@ -5,6 +5,10 @@ import (
 	"errors"
 	"os/exec"
 	"log"
+	"os"
+	"bufio"
+	"io"
+	"strings"
 )
 
 type ClustalOCommandline struct {
@@ -50,4 +54,56 @@ func (c *ClustalOCommandline) CommandBuild() (commandArray []string, err error) 
 	}
 
 	return commandArray, nil
+}
+
+func (c *ClustalOCommandline) ConvertSequential(fileName string, outName string) (err error) {
+	f, err := os.Open(fileName)
+	buff := bufio.NewReader(f)
+	var header string
+	count := 0
+	var alignment []string
+	firstPass := false
+	numbSeq := 0
+	enumCount := 0
+	for {
+		r, err := buff.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Panicln(err)
+		}
+		count++
+
+		if count != 1 {
+			s := strings.TrimSpace(r)
+			if !firstPass {
+				alignment = append(alignment, s)
+				if s == "" {
+					firstPass = true
+					numbSeq = len(alignment)
+				}
+			}  else {
+				if s == "" {
+					enumCount = 0
+				} else if enumCount < numbSeq {
+					alignment[enumCount] += s
+					enumCount++
+				}
+			}
+		} else {
+			header = r
+		}
+	}
+	f.Close()
+	f, err = os.Create(outName)
+	if err != nil {
+		return err
+	}
+	writer := bufio.NewWriter(f)
+	writer.WriteString(header)
+	writer.WriteString(strings.Join(alignment, "\n"))
+	writer.Flush()
+	f.Close()
+	return err
 }

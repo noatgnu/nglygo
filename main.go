@@ -20,8 +20,9 @@ func main() {
 	for f := range filtered {
 
 		wg.Add(1)
+		sem <- true
 		go func() {
-			sem <- true
+
 			workflow.ProcessAlignment(f.FileName)
 
 			defer func() {

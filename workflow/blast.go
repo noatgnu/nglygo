@@ -219,7 +219,7 @@ func FilterMatchFile(organisms []string, query BlastDBCMDResult, filteredChan ch
 	}
 	defer filtered.Close()
 	b := bufio.NewWriter(filtered)
-	count := 0
+	count := 1
 	result := BlastMap{}
 	result.AccMap = make(map[string]string)
 	result.IdFullMap = make(map[string]string)
