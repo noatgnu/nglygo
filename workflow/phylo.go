@@ -71,7 +71,7 @@ func CombineTree(a codemlwrapper.CodeMLCommandline) {
 	p.Command = `C:\Program Files\Anaconda3\python.exe`
 	p.CurrentTree = a.TreeFile
 	p.Reconstructed = strings.Replace(a.TreeFile, "_tree", "_reconstructed_tree", -1)
-	p.Out = strings.Replace(a.TreeFile, "_tree", "_combined_tree", -1)
+	p.Out = strings.Replace(a.TreeFile, ".txt", ".xml", -1)
 	err := p.Execute()
 	if err != nil {
 		log.Panicln(err)
