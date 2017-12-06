@@ -12,7 +12,20 @@ import (
 	"bytes"
 	"io"
 	"strings"
+	"regexp"
 )
+
+type Branch struct{
+	Origin string
+	Target string
+	Changes [][]string
+}
+
+const branchRegexPat = `(\d+)..(\d+)`
+var branchRegex = regexp.MustCompile(branchRegexPat)
+
+const changeRegexPat = `([0-9]*)\s(.)\s([0-9]*\.?[0-9]*)\s->\s(.)`
+var changeRegex = regexp.MustCompile(changeRegexPat)
 
 type CodeMLCommandline struct {
 	Command string
@@ -125,7 +138,7 @@ func (c *CodeMLCommandline) ReadSupplemental() {
 		log.Panicln(err)
 	}
 	buff := bufio.NewReader(f)
-	currentTree := False
+	var branches []Branch
 	for {
 		r, err := buff.ReadString('\n')
 		if err != nil {
@@ -135,9 +148,106 @@ func (c *CodeMLCommandline) ReadSupplemental() {
 			log.Panicln(err)
 		}
 		s := strings.TrimSpace(r)
-		if s == "Ancestral reconstruction by AAML." {
+		if s == "tree with node labels for Rod Page's TreeView" {
+			ReadCurrentTree(c.TreeFile, buff)
+		} else if s == "List of extant and reconstructed sequences" {
+			WriteReconstructedAlignment(c.SeqFile ,buff)
+
+		} else if strings.HasPrefix(s, "Branch") {
+			var branch Branch
+			result := branchRegex.FindAllStringSubmatch(s, 2)
+			branch.Origin = result[0][1]
+			branch.Target = result[0][2]
+			ReadBranch(buff, &branch)
+			branches = append(branches, branch)
+		}
+	}
+}
+
+func ReadCurrentTree(filename string, buff *bufio.Reader){
+	f, err := os.Create(strings.Replace(filename, "_tree", "_reconstructed_tree", -1))
+	if err != nil {
+		log.Panicln(err)
+	}
+	defer f.Close()
+	writer := bufio.NewWriter(f)
+	for {
+		r, err := buff.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				writer.Flush()
+				break
+			}
+			log.Panicln(err)
+		}
+		s := strings.TrimSpace(r)
+		if s != "" {
+			writer.WriteString(s)
+			writer.Flush()
+			break
+		}
+	}
+
+}
+
+func WriteReconstructedAlignment(filename string, buff *bufio.Reader) {
+	af, err := os.Create(strings.Replace(filename, ".phy", ".reconstructed.phy", -1))
+	if err != nil {
+		log.Panicln(err)
+	}
+	defer af.Close()
+	writer := bufio.NewWriter(af)
+	alignmentStarted := false
+	started := false
+	for {
+		r, err := buff.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				writer.Flush()
+				break
+			}
+			log.Panicln(err)
+		}
+		s := strings.TrimSpace(r)
+
+		if s != ""  {
+			writer.WriteString(fmt.Sprintf("%v\n", s))
+		} else {
+			if !started {
+				started = true
+			} else {
+				if !alignmentStarted {
+					alignmentStarted = true
+				}  else {
+					writer.Flush()
+					break
+				}
+			}
 
 		}
 	}
 }
 
+func ReadBranch(buff *bufio.Reader, branch *Branch) {
+	enterBranch := false
+	for {
+		r, err := buff.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Panicln(err)
+		}
+		s := strings.TrimSpace(r)
+		if s != "" {
+			enterBranch = true
+			changes := changeRegex.FindAllStringSubmatch(s, -1)
+			if changes != nil {
+				branch.Changes = append(branch.Changes, changes[0][1:])
+			}
+		} else if s == "" && enterBranch {
+			break
+		}
+	}
+
+}

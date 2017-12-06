@@ -6,6 +6,7 @@ import (
 	"github.com/noatgnu/ancestral/phymlwrapper"
 	"strings"
 	"github.com/noatgnu/ancestral/codemlwrapper"
+	"github.com/noatgnu/ancestral/pythoncmdwrapper"
 )
 
 func CreateAlignment(in string, out string) {
@@ -58,6 +59,20 @@ func ASR(seq string, tree string, out string) {
 	a.Method = 1
 	a.BuildCtl(strings.Replace(seq, ".phy", ".ctl", -1))
 	err := a.Execute()
+	if err != nil {
+		log.Panicln(err)
+	}
+	a.ReadSupplemental()
+	CombineTree(a)
+}
+
+func CombineTree(a codemlwrapper.CodeMLCommandline) {
+	p := pythoncmdwrapper.ProcessTreeCommandline{}
+	p.Command = `C:\Program Files\Anaconda3\python.exe`
+	p.CurrentTree = a.TreeFile
+	p.Reconstructed = strings.Replace(a.TreeFile, "_tree", "_reconstructed_tree", -1)
+	p.Out = strings.Replace(a.TreeFile, "_tree", "_combined_tree", -1)
+	err := p.Execute()
 	if err != nil {
 		log.Panicln(err)
 	}
