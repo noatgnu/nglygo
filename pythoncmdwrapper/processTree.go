@@ -4,12 +4,11 @@ import (
 	"github.com/noatgnu/ancestral/blastwrapper"
 	"errors"
 	"os/exec"
-	"bytes"
-	"log"
 )
 
 type ProcessTreeCommandline struct {
 	Command string
+	Program string
 	CurrentTree string
 	Reconstructed string
 	Out string
@@ -23,11 +22,8 @@ func (p *ProcessTreeCommandline) Execute() (err error) {
 	}
 	if commandArray != nil {
 		cmd := exec.Command(commandArray[0], commandArray[1:]...)
-		var stderr bytes.Buffer
 		err = cmd.Run()
-		cmd.Stderr = &stderr
 		if err != nil {
-			log.Panicln(stderr.String())
 			return err
 		}
 	}
@@ -39,6 +35,11 @@ func (p *ProcessTreeCommandline) CommandBuild() (commandArray []string, err erro
 		commandArray = append(commandArray, p.Command)
 	} else {
 		commandArray = append(commandArray, "python")
+	}
+	if p.Program != "" {
+		commandArray = append(commandArray, p.Program)
+	} else {
+		commandArray = append(commandArray, "processTree.py")
 	}
 	if p.CurrentTree != "" {
 		commandArray = append(commandArray, "-ct", p.CurrentTree)

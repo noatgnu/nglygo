@@ -55,6 +55,12 @@ type CodeMLCommandline struct {
 	blastwrapper.CommandLine
 }
 
+func (b *Branch) ToFile(writer *bufio.Writer) {
+	for _, v := range b.Changes {
+		writer.WriteString(fmt.Sprintf("%v\t%v\t%v\t%v\t%v\t%v\n", b.Origin, b.Target, v[0], v[1], v[2], v[3]))
+	}
+}
+
 func (c *CodeMLCommandline) Execute() (err error) {
 	commandArray, err := c.CommandBuild()
 	if err != nil {
@@ -137,8 +143,16 @@ func (c *CodeMLCommandline) ReadSupplemental() {
 	if err != nil {
 		log.Panicln(err)
 	}
+	defer f.Close()
 	buff := bufio.NewReader(f)
-	var branches []Branch
+	bf, err := os.Create(c.SeqFile+"_branch")
+	if err != nil {
+		log.Panicln(err)
+	}
+	defer bf.Close()
+	writer := bufio.NewWriter(bf)
+	writer.WriteString("Origin\tTarget\tPosition\tOrigin_Residue\tStats\tTarget_Residue\n")
+	//var branches []Branch
 	for {
 		r, err := buff.ReadString('\n')
 		if err != nil {
@@ -158,10 +172,11 @@ func (c *CodeMLCommandline) ReadSupplemental() {
 			result := branchRegex.FindAllStringSubmatch(s, 2)
 			branch.Origin = result[0][1]
 			branch.Target = result[0][2]
-			ReadBranch(buff, &branch)
-			branches = append(branches, branch)
+			ReadBranch(buff, &branch, writer)
+			//branches = append(branches, branch)
 		}
 	}
+	writer.Flush()
 }
 
 func ReadCurrentTree(filename string, buff *bufio.Reader){
@@ -211,7 +226,11 @@ func WriteReconstructedAlignment(filename string, buff *bufio.Reader) {
 		s := strings.TrimSpace(r)
 
 		if s != ""  {
-			writer.WriteString(fmt.Sprintf("%v\n", s))
+			if started && !alignmentStarted {
+				writer.WriteString(" "+s+"\n")
+			} else {
+				writer.WriteString(s[0:18]+strings.Replace(s[18:], " ", "", -1)+"\n")
+			}
 		} else {
 			if !started {
 				started = true
@@ -228,7 +247,7 @@ func WriteReconstructedAlignment(filename string, buff *bufio.Reader) {
 	}
 }
 
-func ReadBranch(buff *bufio.Reader, branch *Branch) {
+func ReadBranch(buff *bufio.Reader, branch *Branch, writer *bufio.Writer) {
 	enterBranch := false
 	for {
 		r, err := buff.ReadString('\n')
@@ -243,7 +262,8 @@ func ReadBranch(buff *bufio.Reader, branch *Branch) {
 			enterBranch = true
 			changes := changeRegex.FindAllStringSubmatch(s, -1)
 			if changes != nil {
-				branch.Changes = append(branch.Changes, changes[0][1:])
+				writer.WriteString(fmt.Sprintf("%v\t%v\t%v\t%v\t%v\t%v\n", branch.Origin, branch.Target, changes[0][1], changes[0][2], changes[0][3], changes[0][4]))
+				//branch.Changes = append(branch.Changes, changes[0][1:])
 			}
 		} else if s == "" && enterBranch {
 			break
