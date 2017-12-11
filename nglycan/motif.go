@@ -23,7 +23,7 @@ func CheckMotif(seq string, v []int, ts [][]int) (result []int) {
 	return result
 }
 
-func MotifParseStringWithGap(c string) (result [][]int) {
+func MotifParseStringWithGap(c string, number int) (result [][]int) {
 	n := nRe.FindAllStringIndex(c, -1)
 	ts := tsRe.FindAllStringIndex(c, -1)
 	for _, v := range n {
@@ -31,6 +31,10 @@ func MotifParseStringWithGap(c string) (result [][]int) {
 			r := CheckMotif(c, v, ts)
 			if len(r) > 0 {
 				result = append(result, r)
+				number--
+			}
+			if number == 0 {
+				return result
 			}
 		}
 	}

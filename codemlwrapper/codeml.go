@@ -137,7 +137,7 @@ func (c *CodeMLCommandline) BuildCtl(fileName string) (err error) {
 	return err
 }
 
-func (c *CodeMLCommandline) ReadSupplemental() {
+func (c *CodeMLCommandline) ReadSupplemental() (branches []Branch) {
 	dir, _ := filepath.Split(c.SeqFile)
 	f, err := os.Open(filepath.Join(dir, "rst"))
 	if err != nil {
@@ -152,7 +152,7 @@ func (c *CodeMLCommandline) ReadSupplemental() {
 	defer bf.Close()
 	writer := bufio.NewWriter(bf)
 	writer.WriteString("Origin\tTarget\tPosition\tOrigin_Residue\tStats\tTarget_Residue\n")
-	//var branches []Branch
+	//branches = make(map[string]*Branch)
 	for {
 		r, err := buff.ReadString('\n')
 		if err != nil {
@@ -173,10 +173,11 @@ func (c *CodeMLCommandline) ReadSupplemental() {
 			branch.Origin = result[0][1]
 			branch.Target = result[0][2]
 			ReadBranch(buff, &branch, writer)
-			//branches = append(branches, branch)
+			branches = append(branches, branch)
 		}
 	}
 	writer.Flush()
+	return branches
 }
 
 func ReadCurrentTree(filename string, buff *bufio.Reader){
@@ -263,7 +264,7 @@ func ReadBranch(buff *bufio.Reader, branch *Branch, writer *bufio.Writer) {
 			changes := changeRegex.FindAllStringSubmatch(s, -1)
 			if changes != nil {
 				writer.WriteString(fmt.Sprintf("%v\t%v\t%v\t%v\t%v\t%v\n", branch.Origin, branch.Target, changes[0][1], changes[0][2], changes[0][3], changes[0][4]))
-				//branch.Changes = append(branch.Changes, changes[0][1:])
+				branch.Changes = append(branch.Changes, changes[0][1:])
 			}
 		} else if s == "" && enterBranch {
 			break
