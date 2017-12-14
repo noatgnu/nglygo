@@ -1,4 +1,5 @@
 import argparse
+
 from Bio import Phylo
 
 p = argparse.ArgumentParser()
@@ -10,6 +11,7 @@ p.add_argument("-o", type=str, dest="out")
 a = p.parse_args()
 currentTree = Phylo.read(a.ct, format="newick")
 reconstructed = Phylo.read(a.asrt, format="newick")
+
 for c1, c2 in zip(currentTree.find_clades(), reconstructed.find_clades()):
     c1.test = "test"
     if not c1.name:

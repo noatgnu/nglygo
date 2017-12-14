@@ -21,6 +21,10 @@ type Branch struct{
 	Changes [][]string
 }
 
+type BranchAnalysis struct{
+	Results [][]string `json:"results"`
+}
+
 const branchRegexPat = `(\d+)..(\d+)`
 var branchRegex = regexp.MustCompile(branchRegexPat)
 

@@ -13,10 +13,10 @@ import (
 )
 
 type BlastMap struct {
-	IdFullMap map[string]string
-	OrganismMap map[string]string
-	AccMap map[string]string
-	FileName string
+	IdFullMap map[string]string `json:"id"`
+	OrganismMap map[string]string `json:"organism"`
+	AccMap map[string]string `json:"accession"`
+	FileName string `json:"filename,string"`
 }
 
 type FilterResult struct {
@@ -241,6 +241,7 @@ func FilterMatchFile(organisms []string, query BlastDBCMDResult, filteredChan ch
 		log.Printf("Started: Not enough species (%v)", outFile)
 	}
 	defer b.Flush()
+
 }
 func ProcessOrganisms(buff *bufio.Reader, s blastwrapper.PrimeSeq, organisms []string, queryLength int, c chan FilterResult) {
 	bound := queryLength*20/100

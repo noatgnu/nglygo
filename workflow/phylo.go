@@ -19,6 +19,8 @@ import (
 const nRegexPat = `N`
 var nRegex = regexp.MustCompile(nRegexPat)
 
+
+
 func CreateAlignment(in string, out string) {
 	c := clustalowrapper.ClustalOCommandline{}
 	c.Command = `D:\clustal-omega-1.2.2-win64\clustalo.exe`
@@ -103,7 +105,7 @@ func ASR(seq string, tree string, out string) {
 		log.Panicln(err)
 	}
 	branches := a.ReadSupplemental()
-	MotifAnalysis(seq, branches, 2)
+	MotifAnalysis(seq, branches, 0)
 	CombineTree(a)
 }
 
@@ -127,17 +129,18 @@ func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int) {
 							conservedChecked[e[0]] = true
 							writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Origin+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Origin][n[0]:n[1]]+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Target][n[0]:n[1]]+"\t"+"conserved\n")
 						} else {
+
 							start := e[0]
 							if e[0] -d <= 0 {
 								start = 0
 							} else {
 								start = e[0] -d
 							}
-							end := e[1]
-							if e[1] +d >= alignment.Length {
+							end := e[0] +1
+							if end +d >= alignment.Length {
 								end = alignment.Length
 							} else {
-								end = e[1] + d
+								end = e[0] + d
 							}
 							s := alignment.Alignment[b.Target][start:end]
 							result := nRegex.FindAllStringIndex(s, -1)
@@ -172,8 +175,8 @@ func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int) {
 							} else {
 								start = e[0] -d
 							}
-							end := e[1]
-							if e[1] +d >= alignment.Length {
+							end := e[0] +1
+							if end +d >= alignment.Length {
 								end = alignment.Length
 							} else {
 								end = e[1] + d
@@ -222,3 +225,4 @@ func ProcessAlignment(filename string) {
 	CreateTreeML(alignmentFile)
 	ASR(alignmentFile,alignmentFile+"_phyml_tree.txt", strings.Replace(alignmentFile, ".phy", ".asr", -1))
 }
+
