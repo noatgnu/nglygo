@@ -14,12 +14,25 @@ import (
 	"fmt"
 	"strconv"
 	"regexp"
+	"encoding/csv"
+	"io"
 )
 
 const nRegexPat = `N`
 var nRegex = regexp.MustCompile(nRegexPat)
 
-
+type BranchMotif struct {
+	Origin string `json:"origin"`
+	Target string `json:"target"`
+	Source string `json:"source"`
+	OriginStart string `json:"originStart"`
+	OriginEnd string `json:"originEnd"`
+	OriginSeq string `json:"originSeq"`
+	TargetStart string `json:"targetStart"`
+	TargetEnd string `json:"targetEnd"`
+	TargetSeq string `json:"targetSeq"`
+	Status string `json:"status"`
+}
 
 func CreateAlignment(in string, out string) {
 	c := clustalowrapper.ClustalOCommandline{}
@@ -107,6 +120,30 @@ func ASR(seq string, tree string, out string) {
 	branches := a.ReadSupplemental()
 	MotifAnalysis(seq, branches, 0)
 	CombineTree(a)
+}
+
+func ReadMotifAnalysis(filename string) (ArrayMotifA []BranchMotif) {
+	f, err := os.Open(filename)
+	if err != nil {
+		log.Panicln(err)
+	}
+	reader := csv.NewReader(f)
+	reader.Comma = '\t'
+	var header []string
+	for {
+		r, err := reader.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+		}
+		if header != nil {
+			ArrayMotifA = append(ArrayMotifA, BranchMotif{r[0], r[1], r[2],r[3], r[4], r[5],r[6],r[7],r[8],r[9]})
+		} else {
+			header = r
+		}
+	}
+	return ArrayMotifA
 }
 
 func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int) {

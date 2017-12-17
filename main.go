@@ -32,6 +32,9 @@ type Query struct {
 	AlignFile string `json:"alignFile"`
 	Description string `json:"description"`
 	BlastMap workflow.BlastMap `json:"blastMap"`
+	HasMotifAnalysis bool `json:"hasMotif"`
+	MotifAnalysisFile string `json:"motifFile"`
+	MotifAnalysis []workflow.BranchMotif `json:"motif"`
 }
 
 type CoreDB struct {
@@ -156,6 +159,12 @@ func GetQuery (id string, db string, detail bool) Query {
 		} else if strings.HasSuffix(v, `compiled.reconstructed.phy`) {
 			query.AlignFile = v
 			query.HasAlign = true
+		} else if strings.HasSuffix(v, `compiled.motif.analysis.txt`) {
+			query.MotifAnalysisFile = v
+			query.HasMotifAnalysis = true
+			if detail {
+				query.MotifAnalysis = workflow.ReadMotifAnalysis(v)
+			}
 		}
 	}
 	return query
