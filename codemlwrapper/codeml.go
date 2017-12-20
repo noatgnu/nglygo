@@ -254,6 +254,7 @@ func WriteReconstructedAlignment(filename string, buff *bufio.Reader) {
 
 func ReadBranch(buff *bufio.Reader, branch *Branch, writer *bufio.Writer) {
 	enterBranch := false
+	emptyLine := 0
 	for {
 		r, err := buff.ReadString('\n')
 		if err != nil {
@@ -265,13 +266,20 @@ func ReadBranch(buff *bufio.Reader, branch *Branch, writer *bufio.Writer) {
 		s := strings.TrimSpace(r)
 		if s != "" {
 			enterBranch = true
+
 			changes := changeRegex.FindAllStringSubmatch(s, -1)
 			if changes != nil {
 				writer.WriteString(fmt.Sprintf("%v\t%v\t%v\t%v\t%v\t%v\n", branch.Origin, branch.Target, changes[0][1], changes[0][2], changes[0][3], changes[0][4]))
 				branch.Changes = append(branch.Changes, changes[0][1:])
 			}
-		} else if s == "" && enterBranch {
-			break
+		} else if s == "" {
+			emptyLine ++
+			if enterBranch {
+				break
+			}
+			if emptyLine == 3 {
+				break
+			}
 		}
 	}
 

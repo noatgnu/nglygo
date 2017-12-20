@@ -205,6 +205,8 @@ func main() {
 	r.HandleFunc(`/db/`, GetDBListHandler)
 	r.HandleFunc(`/db/{db}`, GetAllQueryHandler)
 	r.HandleFunc(`/query/{db}/{id}`, GetQueryHandler)
+	r.HandleFunc(`/create`, CreateDBHandler)
+
 	//http.Handle("/", r)
 	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(originsOk, headersOk, methodsOk)(r)))
 }

@@ -31,6 +31,12 @@ type BranchMotif struct {
 	TargetStart string `json:"targetStart"`
 	TargetEnd string `json:"targetEnd"`
 	TargetSeq string `json:"targetSeq"`
+	ExpandedOriginStart string `json:"expOriginStart"`
+	ExpandedOriginEnd string `json:"expOriginEnd"`
+	ExpandedOriginSeq string `json:"expOriginSeq"`
+	ExpandedTargetStart string `json:"expTargetStart"`
+	ExpandedTargetEnd string `json:"expTargetEnd"`
+	ExpandedTargetSeq string `json:"expTargetSeq"`
 	Status string `json:"status"`
 }
 
@@ -138,7 +144,7 @@ func ReadMotifAnalysis(filename string) (ArrayMotifA []BranchMotif) {
 			}
 		}
 		if header != nil {
-			ArrayMotifA = append(ArrayMotifA, BranchMotif{r[0], r[1], r[2],r[3], r[4], r[5],r[6],r[7],r[8],r[9]})
+			ArrayMotifA = append(ArrayMotifA, BranchMotif{r[0], r[1], r[2],r[3], r[4], r[5],r[6],r[7],r[8],r[9], r[10],r[11],r[12],r[13],r[14], r[15]})
 		} else {
 			header = r
 		}
@@ -154,7 +160,7 @@ func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int) {
 	}
 	defer f.Close()
 	writer := bufio.NewWriter(f)
-	writer.WriteString("Origin\tTarget\tPosition_Source\tOrigin_Aligned_Start\tOrigin_Aligned_End\tOrigin_Seq\tTarget_Aligned_Start\tTarget_Aligned_End\tTarget_Seq\tMotif_Status\n")
+	writer.WriteString("Origin\tTarget\tPosition_Source\tOrigin_Aligned_Start\tOrigin_Aligned_End\tOrigin_Seq\tTarget_Aligned_Start\tTarget_Aligned_End\tTarget_Seq\tMotif_Status\tExpanded_Origin_Start\tExpanded_Origin_End\tExpanded_Origin_Seq\tExpanded_Target_Start\tExpanded_Target_End\tExpanded_Target_seq\n")
 
 	for _, b := range branches {
 		conservedChecked := make(map[int]bool)
@@ -164,7 +170,10 @@ func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int) {
 					if m, ok := nMap[b.Target]; ok {
 						if n, ok := m[e[0]]; ok {
 							conservedChecked[e[0]] = true
-							writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Origin+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Origin][n[0]:n[1]]+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Target][n[0]:n[1]]+"\t"+"conserved\n")
+							startOrigin, endOrigin := ExpandSequence(10,10, alignment.Alignment[b.Origin], e[0], e[0]+1, "-")
+							startTarget, endTarget := ExpandSequence(10,10, alignment.Alignment[b.Target], e[0], e[0]+1, "-")
+
+							writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Origin+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Origin][n[0]:n[1]]+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Target][n[0]:n[1]]+"\t"+strconv.Itoa(startOrigin)+"\t"+strconv.Itoa(endOrigin)+"\t"+alignment.Alignment[b.Origin][startOrigin:endOrigin]+"\t"+strconv.Itoa(startTarget)+"\t"+strconv.Itoa(endTarget)+"\t"+alignment.Alignment[b.Target][startTarget:endTarget]+"\t"+"conserved\n")
 						} else {
 
 							start := e[0]
@@ -185,12 +194,17 @@ func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int) {
 								for _, a := range result {
 									if n, ok := m[a[0] + start]; ok {
 										conservedChecked[e[0]] = true
-										writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Origin+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Origin][e[0]:e[1]]+"\t"+strconv.Itoa(n[0])+"\t"+strconv.Itoa(n[1])+"\t"+alignment.Alignment[b.Target][n[0]:n[1]]+"\t"+"potentially conserved\n")
+										startOrigin, endOrigin := ExpandSequence(10,10, alignment.Alignment[b.Origin], e[0], e[0]+1, "-")
+										startTarget, endTarget := ExpandSequence(10,10, alignment.Alignment[b.Target], n[0], n[0]+1, "-")
+
+										writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Origin+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Origin][e[0]:e[1]]+"\t"+strconv.Itoa(n[0])+"\t"+strconv.Itoa(n[1])+"\t"+alignment.Alignment[b.Target][n[0]:n[1]]+"\t"+strconv.Itoa(startOrigin)+"\t"+strconv.Itoa(endOrigin)+"\t"+alignment.Alignment[b.Origin][startOrigin:endOrigin]+"\t"+strconv.Itoa(startTarget)+"\t"+strconv.Itoa(endTarget)+"\t"+alignment.Alignment[b.Target][startTarget:endTarget]+"\t"+"potentially conserved\n")
 										break
 									}
 								}
 							} else {
-								writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Origin+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Origin][e[0]:e[1]]+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Target][e[0]:e[1]]+"\t"+"loss\n")
+								startOrigin, endOrigin := ExpandSequence(10,10, alignment.Alignment[b.Origin], e[0], e[0]+1, "-")
+								startTarget, endTarget := ExpandSequence(10,10, alignment.Alignment[b.Target], e[0], e[0]+1, "-")
+								writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Origin+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Origin][e[0]:e[1]]+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Target][e[0]:e[1]]+"\t"+strconv.Itoa(startOrigin)+"\t"+strconv.Itoa(endOrigin)+"\t"+alignment.Alignment[b.Origin][startOrigin:endOrigin]+"\t"+strconv.Itoa(startTarget)+"\t"+strconv.Itoa(endTarget)+"\t"+alignment.Alignment[b.Target][startTarget:endTarget]+"\t"+"loss\n")
 							}
 						}
 					}
@@ -204,7 +218,9 @@ func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int) {
 					if m, ok := nMap[b.Origin]; ok {
 						if n, ok := m[e[0]]; ok {
 							conservedChecked[e[0]] = true
-							writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Target+"\t"+strconv.Itoa(n[0])+"\t"+strconv.Itoa(n[1])+"\t"+alignment.Alignment[b.Origin][n[0]:n[1]]+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Target][e[0]:e[1]]+"\t"+"conserved\n")
+							startOrigin, endOrigin := ExpandSequence(10,10, alignment.Alignment[b.Origin], n[0], n[0]+1, "-")
+							startTarget, endTarget := ExpandSequence(10,10, alignment.Alignment[b.Target], e[0], e[0]+1, "-")
+							writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Target+"\t"+strconv.Itoa(n[0])+"\t"+strconv.Itoa(n[1])+"\t"+alignment.Alignment[b.Origin][n[0]:n[1]]+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Target][e[0]:e[1]]+"\t"+strconv.Itoa(startOrigin)+"\t"+strconv.Itoa(endOrigin)+"\t"+alignment.Alignment[b.Origin][startOrigin:endOrigin]+"\t"+strconv.Itoa(startTarget)+"\t"+strconv.Itoa(endTarget)+"\t"+alignment.Alignment[b.Target][startTarget:endTarget]+"\t"+"conserved\n")
 						} else {
 							start := e[0]
 							if e[0] -d <= 0 {
@@ -224,12 +240,16 @@ func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int) {
 								for _, a := range result {
 									if n, ok := m[a[0] + start]; ok {
 										conservedChecked[e[0]] = true
-										writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Target+"\t"+strconv.Itoa(n[0])+"\t"+strconv.Itoa(n[1])+"\t"+alignment.Alignment[b.Origin][n[0]:n[1]]+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Target][e[0]:e[1]]+"\t"+"potentially conserved\n")
+										startOrigin, endOrigin := ExpandSequence(10,10, alignment.Alignment[b.Origin], n[0], n[0]+1, "-")
+										startTarget, endTarget := ExpandSequence(10,10, alignment.Alignment[b.Target], e[0], e[0]+1, "-")
+										writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Target+"\t"+strconv.Itoa(n[0])+"\t"+strconv.Itoa(n[1])+"\t"+alignment.Alignment[b.Origin][n[0]:n[1]]+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Target][e[0]:e[1]]+"\t"+strconv.Itoa(startOrigin)+"\t"+strconv.Itoa(endOrigin)+"\t"+alignment.Alignment[b.Origin][startOrigin:endOrigin]+"\t"+strconv.Itoa(startTarget)+"\t"+strconv.Itoa(endTarget)+"\t"+alignment.Alignment[b.Target][startTarget:endTarget]+"\t"+"potentially conserved\n")
 										break
 									}
 								}
 							} else {
-								writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Target+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Origin][e[0]:e[1]]+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Target][e[0]:e[1]]+"\t"+"gain\n")
+								startOrigin, endOrigin := ExpandSequence(10,10, alignment.Alignment[b.Origin], e[0], e[0]+1, "-")
+								startTarget, endTarget := ExpandSequence(10,10, alignment.Alignment[b.Target], e[0], e[0]+1, "-")
+								writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Target+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Origin][e[0]:e[1]]+"\t"+strconv.Itoa(e[0])+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Target][e[0]:e[1]]+"\t"+strconv.Itoa(startOrigin)+"\t"+strconv.Itoa(endOrigin)+"\t"+alignment.Alignment[b.Origin][startOrigin:endOrigin]+"\t"+strconv.Itoa(startTarget)+"\t"+strconv.Itoa(endTarget)+"\t"+alignment.Alignment[b.Target][startTarget:endTarget]+"\t"+"gain\n")
 							}
 						}
 					}
@@ -263,3 +283,37 @@ func ProcessAlignment(filename string) {
 	ASR(alignmentFile,alignmentFile+"_phyml_tree.txt", strings.Replace(alignmentFile, ".phy", ".asr", -1))
 }
 
+func ExpandSequence(numberForward int, numberBackward int, sequence string, start int, end int, ignoreCharacter string) (startPosition int, endPosition int) {
+	forwardOffset := 0
+	backwardOffset := 0
+	lSeq := len(sequence)
+	for {
+		if numberForward == 0 && numberBackward == 0 {
+			break
+		}
+		if numberForward > 0 {
+			l := end + forwardOffset
+			if l >= lSeq {
+				numberForward = 0
+			} else {
+				if sequence[l:l+1] != ignoreCharacter {
+					numberForward --
+				}
+				forwardOffset ++
+			}
+
+		}
+ 		if numberBackward > 0 {
+			backwardOffset ++
+			l := start - backwardOffset
+			if l <= 0 {
+				numberBackward = 0
+			} else {
+				if sequence[l:l+1] != ignoreCharacter {
+					numberBackward --
+				}
+			}
+		}
+	}
+	return start-backwardOffset, end+forwardOffset
+}
