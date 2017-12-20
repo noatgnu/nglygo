@@ -56,6 +56,7 @@ type CodeMLCommandline struct {
 	SmallDiff string
 	CleanData int
 	Method int
+	NData int
 	blastwrapper.CommandLine
 }
 
@@ -124,7 +125,7 @@ func (c *CodeMLCommandline) BuildCtl(fileName string) (err error) {
 		return errors.New("require AA substitution rate file")
 	}
 	writer.WriteString(
-		fmt.Sprintf("noisy = %v\nverbose = %v\nrunmode = %v\nseqtype = %v\nclock = %v\naaDist = %v\nmodel = %v\nicode = %v\nMgene = %v\nfix_alpha = %v\nMalpha = %v\nncatG = %v\ngetSE = %v\nRateAncestor = %v\ncleandata = %v\nmethod = %v\n", c.Noisy, c.Verbose, c.Runmode, c.SeqType, c.Clock, c.AADist, c.Model, c.ICode, c.Mgene, c.FixAlpha, c.MAlpha, c.NCatG, c.GetSE, c.RateAncestor, c.CleanData, c.Method))
+		fmt.Sprintf("noisy = %v\nverbose = %v\nrunmode = %v\nseqtype = %v\nclock = %v\naaDist = %v\nmodel = %v\nicode = %v\nMgene = %v\nfix_alpha = %v\nMalpha = %v\nncatG = %v\ngetSE = %v\nRateAncestor = %v\ncleandata = %v\nmethod = %v\nndata = %v\n", c.Noisy, c.Verbose, c.Runmode, c.SeqType, c.Clock, c.AADist, c.Model, c.ICode, c.Mgene, c.FixAlpha, c.MAlpha, c.NCatG, c.GetSE, c.RateAncestor, c.CleanData, c.Method, c.NData))
 	if c.SmallDiff != "" {
 		writer.WriteString(fmt.Sprintf("Small_Diff = %v\n", c.SmallDiff))
 	} else {

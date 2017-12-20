@@ -118,6 +118,8 @@ func ASR(seq string, tree string, out string) {
 	a.SmallDiff = "5e-07"
 	a.CleanData = 0
 	a.Method = 1
+	a.Verbose = 2
+	a.NData = 1
 	a.BuildCtl(strings.Replace(seq, ".phy", ".ctl", -1))
 	err := a.Execute()
 	if err != nil {
