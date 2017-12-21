@@ -34,7 +34,7 @@ func SeqQualityControl(seq PrimeSeq, partialCheck bool) (quality bool) {
 		return false
 	}
 
-	for _, v := range []string{"B", "X", "Z"} {
+	for _, v := range []string{"B", "X", "Z", "J"} {
 		if strings.Contains(seq.Seq, v) {
 			return false
 		}

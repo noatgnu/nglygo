@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strconv"
 	"log"
+	"bytes"
 )
 
 type NcbiBlastpCommandline struct {
@@ -27,8 +28,11 @@ func (b *NcbiBlastpCommandline) Execute() (err error) {
 	if commandArray != nil {
 		cmd := exec.Command(commandArray[0], commandArray[1:]...)
 		log.Printf("Started: Performing Blast (%v)", b.Query)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
 		err := cmd.Run()
 		if err != nil {
+			log.Panicln(stderr.String())
 			return err
 		}
 		log.Printf("Finished: Performing Blast (%v)", b.Query)
