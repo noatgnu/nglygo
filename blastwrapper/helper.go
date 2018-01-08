@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"log"
 )
 
 const OrganismRegexPat = `\[([\w\s]+)\]`
@@ -33,9 +34,9 @@ func SeqQualityControl(seq PrimeSeq, partialCheck bool) (quality bool) {
 	if strings.Contains(seq.Id, "LOW QUALITY PROTEIN") {
 		return false
 	}
-
-	for _, v := range []string{"B", "X", "Z", "J"} {
+	for _, v := range []string{"B", "X", "Z", "J", "U"} {
 		if strings.Contains(seq.Seq, v) {
+			log.Println(seq.Seq)
 			return false
 		}
 	}
