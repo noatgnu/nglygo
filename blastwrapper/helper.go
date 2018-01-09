@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"log"
 )
 
 const OrganismRegexPat = `\[([\w\s]+)\]`
@@ -36,7 +35,7 @@ func SeqQualityControl(seq PrimeSeq, partialCheck bool) (quality bool) {
 	}
 	for _, v := range []string{"B", "X", "Z", "J", "U"} {
 		if strings.Contains(seq.Seq, v) {
-			log.Println(seq.Seq)
+			//log.Println(seq.Seq)
 			return false
 		}
 	}
