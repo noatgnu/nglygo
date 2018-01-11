@@ -53,7 +53,7 @@ func CreateJSON(blastMap workflow.BlastMap) {
 
 func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 	os.MkdirAll(`C:\Users\localadmin\GoglandProjects\ancestral\result\test`, os.ModePerm)
-	query := workflow.LoadQuery(`D:\python_projects\datahelper\ancestral_wf\glycoprotein.homosapiens.fasta`)
+	query := workflow.LoadQueryTab(`D:\python_projects\datahelper\ancestral_wf\uniprot-glycoprotein.tab`)
 	// workflow.BlastOffline(`D:\python_projects\datahelper\ancestral_wf\glycoprotein.homosapiens.fasta`, `C:\Users\localadmin\GoglandProjects\ancestral\homosapiens.fasta.blast.tsv`, `C:\Users\localadmin\GoglandProjects\ancestral\nr_customDB`)
 	s := workflow.GetSpeciesList(`D:\python_projects\datahelper\ancestral_wf\species.txt`)
 	filtered := make(chan workflow.BlastMap)

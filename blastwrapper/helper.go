@@ -24,6 +24,7 @@ type TopDom struct {
 type PrimeSeq struct {
 	Id  string
 	Seq string
+	Length int
 	Species string
 	Name string
 	TopDomain []TopDom

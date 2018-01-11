@@ -21,6 +21,7 @@ type BlastMap struct {
 	OrganismMap map[string]string `json:"organism"`
 	AccMap map[string]string `json:"accession"`
 	FileName string `json:"filename,string"`
+	SourceSeq blastwrapper.PrimeSeq
 }
 
 type FilterResult struct {
@@ -30,7 +31,7 @@ type FilterResult struct {
 
 type BlastDBCMDResult struct {
 	Query string
-	QueryLength int
+	Seq blastwrapper.PrimeSeq
 	Filename string
 }
 
@@ -40,9 +41,9 @@ type fmt6Query struct {
 }
 
 var fmt6Column = []string{"qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"}
-var tabQueryColumns = []string{"Entry", "Entry name", "Protein names", "Gene names", "Organism", "Topological domain", "Sequence"}
+var tabQueryColumns = []string{"Entry", "Entry name", "Protein names", "Gene names", "Organism", "Length", "Topological domain", "Sequence"}
 
-func LoadQueryTab(filename string) {
+func LoadQueryTab(filename string) map[string]blastwrapper.PrimeSeq {
 	f, err := os.Open(filename)
 	if err != nil {
 		log.Panicln(err)
@@ -52,7 +53,7 @@ func LoadQueryTab(filename string) {
 	header, err := qcsv.Read()
 	columns := make(map[string]int)
 	q := make(chan blastwrapper.PrimeSeq)
-	m := make(map[string]int)
+	m := make(map[string]blastwrapper.PrimeSeq)
 	for i, v := range header {
 		for _, v2 := range tabQueryColumns {
 			if v == v2 {
@@ -65,7 +66,6 @@ func LoadQueryTab(filename string) {
 			r, err := qcsv.Read()
 			if err != nil {
 				if err == io.EOF {
-
 					break
 				}
 			}
@@ -74,6 +74,11 @@ func LoadQueryTab(filename string) {
 			s.Seq = r[columns["Sequence"]]
 			s.Species = r[columns["Organism"]]
 			s.Name = r[columns["Entry name"]]
+			length, err := strconv.Atoi(r[columns["Length"]])
+			if err != nil {
+				log.Panicln(err)
+			}
+			s.Length =  length
 			var topDomain []blastwrapper.TopDom
 			for _, v := range strings.SplitN(r[columns["Topological domain"]], ";", -1) {
 				result := regexDomain.FindAllStringSubmatch(v, -1)[0]
@@ -100,8 +105,9 @@ func LoadQueryTab(filename string) {
 
 	for r := range q {
 		id := strings.SplitN(r.Id, " ", 2)
-		m[strings.Replace(id[0], ">", "", 1)] = len(r.Seq)
+		m[strings.Replace(id[0], ">", "", 1)] = r
 	}
+	return m
 }
 
 func LoadQuery(filename string) map[string]int {
@@ -207,7 +213,7 @@ func QCFmt6Query(filename string, db string, outFilename string) {
 	}
 }
 
-func BlastFmt6Parser(filename string, outDirectory string, db string, organisms []string, queryMap map[string]int, filtered chan BlastMap) {
+func BlastFmt6Parser(filename string, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq, filtered chan BlastMap) {
 	fmt6Chan := make(chan fmt6Query)
 	BlastDBCMDChan := make(chan BlastDBCMDResult)
 	f, err := os.Open(filename)
@@ -281,7 +287,7 @@ func FilterMatchFile(organisms []string, query BlastDBCMDResult, filteredChan ch
 	buff := bufio.NewReader(matchFile)
 	s := blastwrapper.PrimeSeq{}
 	c := make(chan FilterResult)
-	go ProcessOrganisms(buff, s, o, query.QueryLength, c)
+	go ProcessOrganisms(buff, s, o, query.Seq.Length, c)
 
 	filtered, err := os.Create(outFile)
 	if err != nil {
@@ -295,6 +301,7 @@ func FilterMatchFile(organisms []string, query BlastDBCMDResult, filteredChan ch
 	result.IdFullMap = make(map[string]string)
 	result.OrganismMap = make(map[string]string)
 	result.FileName = outFile
+	result.SourceSeq = query.Seq
 	for p := range c {
 		numb := strconv.Itoa(count)
 		result.OrganismMap[numb] = p.Organism
