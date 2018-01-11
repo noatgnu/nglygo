@@ -10,7 +10,11 @@ import (
 	"strings"
 	"path/filepath"
 	"strconv"
+	"regexp"
 )
+
+var domainPatt = `(\d+)\s>*(\d+)\s(.+)\.\s\{`
+var regexDomain = regexp.MustCompile(domainPatt)
 
 type BlastMap struct {
 	IdFullMap map[string]string `json:"id"`
@@ -34,6 +38,7 @@ type fmt6Query struct {
 	Query string
 	Matches []string
 }
+
 var fmt6Column = []string{"qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"}
 var tabQueryColumns = []string{"Entry", "Entry name", "Protein names", "Gene names", "Organism", "Topological domain", "Sequence"}
 
@@ -47,6 +52,7 @@ func LoadQueryTab(filename string) {
 	header, err := qcsv.Read()
 	columns := make(map[string]int)
 	q := make(chan blastwrapper.PrimeSeq)
+	m := make(map[string]int)
 	for i, v := range header {
 		for _, v2 := range tabQueryColumns {
 			if v == v2 {
@@ -65,13 +71,37 @@ func LoadQueryTab(filename string) {
 			}
 			s := blastwrapper.PrimeSeq{}
 			s.Id = r[columns["Entry"]]
-			s.Seq = r[columns[""]]
+			s.Seq = r[columns["Sequence"]]
+			s.Species = r[columns["Organism"]]
+			s.Name = r[columns["Entry name"]]
+			var topDomain []blastwrapper.TopDom
+			for _, v := range strings.SplitN(r[columns["Topological domain"]], ";", -1) {
+				result := regexDomain.FindAllStringSubmatch(v, -1)[0]
+				if len(result) == 4 {
+					start, err := strconv.Atoi(result[1])
+					if err != nil {
+						log.Panicln(err)
+					}
+					end, err := strconv.Atoi(result[2])
+					if err != nil {
+						log.Panicln(err)
+					}
+					td := blastwrapper.TopDom{Start: start, Stop: end, Type: result[3]}
+					topDomain = append(topDomain, td)
+				}
+			}
+			s.TopDomain = topDomain
 			qc := blastwrapper.SeqQualityControl(s, true)
 			if qc == true {
 				q <- s
 			}
 		}
 	}()
+
+	for r := range q {
+		id := strings.SplitN(r.Id, " ", 2)
+		m[strings.Replace(id[0], ">", "", 1)] = len(r.Seq)
+	}
 }
 
 func LoadQuery(filename string) map[string]int {
@@ -292,7 +322,6 @@ func ProcessOrganisms(buff *bufio.Reader, s blastwrapper.PrimeSeq, organisms []s
 				if s.Id != "" {
 					qc := blastwrapper.SeqQualityControl(s, true)
 					if qc == true {
-						log.Println(qc)
 						check, left, found := blastwrapper.SeqFilterOrganism(s, organisms, true)
 						if check {
 							l := len(s.Seq)
@@ -312,7 +341,6 @@ func ProcessOrganisms(buff *bufio.Reader, s blastwrapper.PrimeSeq, organisms []s
 			if s.Id != "" {
 				qc := blastwrapper.SeqQualityControl(s, true)
 				if qc == true {
-					log.Println(qc)
 					check, left, found := blastwrapper.SeqFilterOrganism(s, organisms, true)
 					if check {
 						l := len(s.Seq)

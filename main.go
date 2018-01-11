@@ -86,14 +86,14 @@ func MakeBlastDBHandler(w http.ResponseWriter, r *http.Request) {
 		fo := `D:\python_projects\datahelper\ancestral_wf\nr_filtered`
 		s := `D:\python_projects\datahelper\ancestral_wf\species.txt`
 		workflow.PreProcessDB(f, fo, s)
-		o := `C:\Users\localadmin\GoglandProjects\ancestral\nr_customDB`
+		o := `D:\GoProject\ancestral\nr_customDB`
 		workflow.CreateCustomDB(fo, o)
 	}
 }
 
 func BlastPHandler(w http.ResponseWriter, r *http.Request){
 	if r.Method == "GET" {
-		workflow.BlastOffline(`D:\python_projects\datahelper\ancestral_wf\glycoprotein.homosapiens.fasta`, `C:\Users\localadmin\GoglandProjects\ancestral\homosapiens.fasta.blast.tsv`, `C:\Users\localadmin\GoglandProjects\ancestral\nr_customDB`)
+		workflow.BlastOffline(`D:\python_projects\datahelper\ancestral_wf\glycoprotein.homosapiens.fasta`, `D:\GoProject\ancestral\homosapiens.fasta.blast.tsv`, `D:\GoProject\ancestral\ancestral\nr_customDB`)
 	}
 }
 

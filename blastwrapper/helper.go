@@ -15,9 +15,18 @@ type CommandLine interface {
 	CommandBuild() ([]string, error)
 }
 
+type TopDom struct {
+	Start int
+	Stop int
+	Type string
+}
+
 type PrimeSeq struct {
 	Id  string
 	Seq string
+	Species string
+	Name string
+	TopDomain []TopDom
 }
 
 func (p *PrimeSeq) ToString() string {
