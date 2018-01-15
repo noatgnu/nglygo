@@ -14,6 +14,8 @@ import (
 	"bufio"
 	"io"
 	"github.com/gorilla/handlers"
+	"encoding/csv"
+	"github.com/noatgnu/ancestral/blastwrapper"
 )
 
 var root = `C:\Users\localadmin\GoglandProjects\ancestral\result`
@@ -52,20 +54,25 @@ func CreateJSON(blastMap workflow.BlastMap) {
 }
 
 func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
-	os.MkdirAll(`C:\Users\localadmin\GoglandProjects\ancestral\result\test`, os.ModePerm)
+	os.MkdirAll(`D:\GoProject\ancestral\result\test1`, os.ModePerm)
 	query := workflow.LoadQueryTab(`D:\python_projects\datahelper\ancestral_wf\uniprot-glycoprotein.tab`)
 	// workflow.BlastOffline(`D:\python_projects\datahelper\ancestral_wf\glycoprotein.homosapiens.fasta`, `C:\Users\localadmin\GoglandProjects\ancestral\homosapiens.fasta.blast.tsv`, `C:\Users\localadmin\GoglandProjects\ancestral\nr_customDB`)
 	s := workflow.GetSpeciesList(`D:\python_projects\datahelper\ancestral_wf\species.txt`)
 	filtered := make(chan workflow.BlastMap)
-	go workflow.BlastFmt6Parser(`C:\Users\localadmin\GoglandProjects\ancestral\homosapiens.fasta.blast.tsv`,`C:\Users\localadmin\GoglandProjects\ancestral\result\test`, `C:\Users\localadmin\GoglandProjects\ancestral\nr_customDB`, s, query, filtered)
+	go workflow.BlastFmt6Parser(`D:\GoProject\ancestral\homosapiens.fasta.blast.tsv`,`D:\GoProject\ancestral\result\test1`, `D:\GoProject\ancestral\nr_customDB`, s, query, filtered)
 	sem := make(chan bool, 6)
 	wg := sync.WaitGroup{}
 	for f := range filtered {
+		if f.MatchSourceID != "" {
+			log.Println(f.FileName, "has match")
+		} else {
+			log.Println(f.FileName, "no match")
+		}
 		wg.Add(1)
 		sem <- true
 		go func() {
 			CreateJSON(f)
-			workflow.ProcessAlignment(f.FileName)
+			workflow.ProcessAlignment(f)
 
 			defer func() {
 				<- sem
@@ -92,8 +99,64 @@ func MakeBlastDBHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func BlastPHandler(w http.ResponseWriter, r *http.Request){
+	f, err := os.Open(`D:\python_projects\datahelper\ancestral_wf\uniprot-glycoprotein.tab`)
+	if err != nil {
+		log.Panicln(err)
+	}
+	qcsv := csv.NewReader(f)
+	qcsv.Comma = '\t'
+	header, err := qcsv.Read()
+	if err != nil {
+		log.Panicln(err)
+	}
+	columns := make(map[string]int)
+	q := make(chan blastwrapper.PrimeSeq)
+	for i, v := range header {
+		for _, v2 := range workflow.TabQueryColumns {
+			if v == v2 {
+				columns[v2] = i
+			}
+		}
+	}
+	go func(){
+		for {
+			r, err := qcsv.Read()
+
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				log.Fatalln(err)
+			}
+			s := blastwrapper.PrimeSeq{}
+			s.Id = r[columns["Entry"]]
+			s.Seq = r[columns["Sequence"]]
+			qc := blastwrapper.SeqQualityControl(s, true)
+			if qc == true {
+				q <- s
+			}
+		}
+		defer close(q)
+	}()
+
+	o, err := os.Create(`D:\GoProject\ancestral\uniprot-homosapiens.fasta`)
+	if err != nil {
+		log.Panicln(err)
+	}
+	writer := bufio.NewWriter(o)
+	count := 0
+	log.Println("Parsing tabulated file.")
+	for s := range q {
+		count++
+		log.Println(count)
+		writer.WriteString(s.ToString())
+	}
+	log.Println("Finished parsing tabulated file.")
+	writer.Flush()
+	o.Close()
+
 	if r.Method == "GET" {
-		workflow.BlastOffline(`D:\python_projects\datahelper\ancestral_wf\glycoprotein.homosapiens.fasta`, `D:\GoProject\ancestral\homosapiens.fasta.blast.tsv`, `D:\GoProject\ancestral\ancestral\nr_customDB`)
+		workflow.BlastOffline(`D:\GoProject\ancestral\uniprot-homosapiens.fasta`, `D:\GoProject\ancestral\homosapiens.fasta.blast.tsv`, `D:\GoProject\ancestral\nr_customDB`)
 	}
 }
 

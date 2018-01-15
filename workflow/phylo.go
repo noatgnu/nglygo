@@ -16,10 +16,13 @@ import (
 	"regexp"
 	"encoding/csv"
 	"io"
+	"github.com/noatgnu/ancestral/blastwrapper"
 )
 
 const nRegexPat = `N`
 var nRegex = regexp.MustCompile(nRegexPat)
+const gappedRegexPat = `-*\w+`
+var gappedRegex = regexp.MustCompile(gappedRegexPat)
 
 type BranchMotif struct {
 	Origin string `json:"origin"`
@@ -53,7 +56,7 @@ func CreateAlignment(in string, out string) {
 	c.ConvertSequential(out+"_inter", out)
 }
 
-func ReadAlignmentPhylip(filename string) (map[string][][]int, map[string][][]int, alignio.Alignment, map[string]map[int][]int) {
+func ReadAlignmentPhylip(filename string, b BlastMap) (map[string][][]int, map[string][][]int, alignio.Alignment, map[string]map[int][]int) {
 	a := alignio.ReadPhylip(filename)
 	f, err := os.Create(strings.Replace(filename, ".phy", ".motifs.txt", -1))
 	if err != nil {
@@ -61,12 +64,19 @@ func ReadAlignmentPhylip(filename string) (map[string][][]int, map[string][][]in
 	}
 	defer f.Close()
 	writer := bufio.NewWriter(f)
-	writer.WriteString("Entry\tStart_Position\tEnd_Position\tMotif\tStart_Position_With_Gap\tEnd_Position_With_Gap\tMotif_With_Gap\n")
+	writer.WriteString("Entry\tStart_Position\tEnd_Position\tMotif\tStart_Position_With_Gap\tEnd_Position_With_Gap\tMotif_With_Gap\tTopological_Domain\n")
 
 	motifMap := make(map[string][][]int)
 	alignedMotifMap := make(map[string][][]int)
 	nResidueAlignedMotifMap := make(map[string]map[int][]int)
 	for k, v := range a.Alignment {
+		var reMap []blastwrapper.TopDom
+		if b.SourceSeq.TopDomain != nil {
+			if k == b.MatchSourceID {
+				log.Print(k, b.MatchSourceID)
+				reMap = RemapTopDom(v, b.SourceSeq.TopDomain, strings.Replace(filename, ".phy", ".topdom.txt", -1))
+			}
+		}
 		nResidueAlignedMotifMap[k] = make(map[int][]int)
 		gap := nglycan.MotifParseStringWithGap(v, -1)
 		noGapSeq := strings.Replace(v, "-", "", -1)
@@ -76,7 +86,16 @@ func ReadAlignmentPhylip(filename string) (map[string][][]int, map[string][][]in
 		alignedMotifMap[k] = gap
 		for i := range gap {
 			nResidueAlignedMotifMap[k][gap[i][0]] = gap[i]
-			writer.WriteString(fmt.Sprintf("%v\t%v\t%v\t%v\t%v\t%v\t%v\n", k, noGap[i][0]+1, noGap[i][1], noGapSeq[noGap[i][0]:noGap[i][1]], gap[i][0]+1, gap[i][1], v[gap[i][0]:gap[i][1]]))
+			topdomType := ""
+			if reMap != nil {
+				for _, rm := range reMap {
+					if (rm.Start <= gap[i][0]) && (rm.Stop > gap[i][0]) {
+						topdomType = rm.Type
+						break
+					}
+				}
+			}
+			writer.WriteString(fmt.Sprintf("%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", k, noGap[i][0]+1, noGap[i][1], noGapSeq[noGap[i][0]:noGap[i][1]], gap[i][0]+1, gap[i][1], v[gap[i][0]:gap[i][1]], topdomType))
 		}
 	}
 	writer.Flush()
@@ -93,7 +112,7 @@ func CreateTreeML(in string) {
 	}
 }
 
-func ASR(seq string, tree string, out string) {
+func ASR(seq string, tree string, out string, bm BlastMap) {
 	a := codemlwrapper.CodeMLCommandline{}
 	a.Command = `D:\paml4.9e\bin\codeml.exe`
 	a.SeqFile = seq
@@ -126,7 +145,7 @@ func ASR(seq string, tree string, out string) {
 		log.Panicln(err)
 	}
 	branches := a.ReadSupplemental()
-	MotifAnalysis(seq, branches, 0)
+	MotifAnalysis(seq, branches, 0, bm)
 	CombineTree(a)
 }
 
@@ -154,8 +173,8 @@ func ReadMotifAnalysis(filename string) (ArrayMotifA []BranchMotif) {
 	return ArrayMotifA
 }
 
-func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int) {
-	_, alignedMotif, alignment, nMap := ReadAlignmentPhylip(strings.Replace(filename, ".phy", ".reconstructed.phy", -1))
+func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int, bm BlastMap) {
+	_, alignedMotif, alignment, nMap := ReadAlignmentPhylip(strings.Replace(filename, ".phy", ".reconstructed.phy", -1), bm)
 	f, err := os.Create(strings.Replace(filename, ".phy", ".motif.analysis.txt", -1))
 	if err != nil {
 		log.Panicln(err)
@@ -277,12 +296,12 @@ func CombineTree(a codemlwrapper.CodeMLCommandline) {
 	}
 }
 
-func ProcessAlignment(filename string) {
-	log.Printf("Started: Phylogeny Construction (%v)", filename)
-	alignmentFile := strings.Replace(filename, ".filtered.fasta", ".phy", -1)
-	CreateAlignment(filename, alignmentFile)
+func ProcessAlignment(b BlastMap) {
+	log.Printf("Started: Phylogeny Construction (%v)", b.FileName)
+	alignmentFile := strings.Replace(b.FileName, ".filtered.fasta", ".phy", -1)
+	CreateAlignment(b.FileName, alignmentFile)
 	CreateTreeML(alignmentFile)
-	ASR(alignmentFile,alignmentFile+"_phyml_tree.txt", strings.Replace(alignmentFile, ".phy", ".asr", -1))
+	ASR(alignmentFile,alignmentFile+"_phyml_tree.txt", strings.Replace(alignmentFile, ".phy", ".asr", -1), b)
 }
 
 func ExpandSequence(numberForward int, numberBackward int, sequence string, start int, end int, ignoreCharacter string) (startPosition int, endPosition int) {
@@ -318,4 +337,52 @@ func ExpandSequence(numberForward int, numberBackward int, sequence string, star
 		}
 	}
 	return start-backwardOffset, end+forwardOffset
+}
+
+func RemapTopDom(seqWithGap string, topDom []blastwrapper.TopDom, filename string) (reMapped []blastwrapper.TopDom) {
+	log.Println("Started: Topological Domain Remap")
+	o, err := os.Create(filename)
+	if err != nil {
+		log.Panicln(err)
+	}
+
+	writer := csv.NewWriter(o)
+	writer.Comma = '\t'
+	writer.Write([]string{"Origin_Start", "Origin_End", "Remapped_Start", "Remmapped_End", "Type"})
+	g := gappedRegex.FindAllStringSubmatchIndex(seqWithGap, -1)
+	for _, t := range topDom {
+		log.Println(t)
+		gap := 0
+		startCheck := false
+		endCheck := false
+		td := blastwrapper.TopDom{}
+		for _, v := range g {
+
+			seq := seqWithGap[v[0]:v[1]]
+			gap += strings.Count(seq, "-")
+			if startCheck == false {
+				if (v[0] <= (t.Start+gap)) && (v[1] <(t.Start+gap)) {
+					td.Start = t.Start+gap
+					startCheck = true
+				}
+			}
+			if endCheck == false {
+				if (v[0] <= (t.Stop+gap)) && (v[1] >= (t.Stop+gap)) {
+					td.Stop = t.Stop+gap
+					endCheck = true
+				}
+			}
+			if (startCheck == true) && (endCheck == true) {
+				td.Type = t.Type
+				writer.Write([]string{strconv.Itoa(t.Start), strconv.Itoa(t.Stop), strconv.Itoa(td.Start), strconv.Itoa(td.Stop), t.Type})
+				break
+			}
+		}
+		reMapped = append(reMapped, td)
+	}
+	writer.Flush()
+	defer log.Println("Finished: Topological Domain Remap")
+	defer o.Close()
+
+	return reMapped
 }

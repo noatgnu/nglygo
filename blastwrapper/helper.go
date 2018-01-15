@@ -31,6 +31,9 @@ type PrimeSeq struct {
 }
 
 func (p *PrimeSeq) ToString() string {
+	if !strings.HasPrefix(p.Id, ">") {
+		return fmt.Sprintf(">%v\n%v\n", p.Id, p.Seq)
+	}
 	return fmt.Sprintf("%v\n%v\n", p.Id, p.Seq)
 }
 
