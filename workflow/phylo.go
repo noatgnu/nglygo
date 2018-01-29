@@ -43,6 +43,90 @@ type BranchMotif struct {
 	Status string `json:"status"`
 }
 
+type AlignmentData struct {
+	SeqId int `json:"seqid"`
+	AA string `json:"aa"`
+	Pos int	`json:"pos"`
+	Value int `json:"value"`
+	YCoord int `json:"yCoord"`
+	Extra map[string]string `json:"extra"`
+}
+
+type MotifConservity struct {
+	Pos int `json:"pos"`
+	Conserve int `json:"conserve"`
+	Count int `json:"count"`
+}
+
+func TopDom(inchan chan map[string]string) []blastwrapper.TopDom {
+	var topDom []blastwrapper.TopDom
+	for m := range inchan {
+
+		start, err := strconv.Atoi(m["Remapped_Start"])
+		if err != nil {
+			log.Println(m)
+			log.Panicln(err)
+		}
+
+		end, err := strconv.Atoi(m["Remapped_End"])
+		if err != nil {
+			log.Panicln(err)
+		}
+		topDom = append(topDom, blastwrapper.TopDom{Start: start, Stop: end, Type: m["Type"]})
+	}
+	return topDom
+}
+
+func ReadTabulatedFile(filename string) (chan map[string]string, error) {
+	infile, err := os.Open(filename)
+	if err != nil {
+		log.Panicln(err)
+	}
+	o := make(chan map[string]string)
+	csvreader := csv.NewReader(infile)
+	csvreader.Comma = '\t'
+	header, err := csvreader.Read()
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		for {
+			row, err := csvreader.Read()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				log.Panicln(err)
+			}
+			m := make(map[string]string)
+			for i, v := range row {
+				m[header[i]] = v
+			}
+			o <- m
+		}
+		close(o)
+		infile.Close()
+	}()
+	return o, nil
+}
+
+func ConserveCount(inchan chan map[string]string) map[int]int {
+	conserveMap := make(map[int]int)
+	for m := range inchan {
+		pos, err := strconv.Atoi(m["Start_Position_With_Gap"])
+		if err != nil {
+			log.Panicln(err)
+		}
+		if _, ok := conserveMap[pos]; !ok {
+			conserveMap[pos] = 0
+		}
+		conserveMap[pos] ++
+	}
+	return conserveMap
+}
+
+
 func CreateAlignment(in string, out string) {
 	c := clustalowrapper.ClustalOCommandline{}
 	c.Command = `D:\clustal-omega-1.2.2-win64\clustalo.exe`
@@ -348,7 +432,7 @@ func RemapTopDom(seqWithGap string, topDom []blastwrapper.TopDom, filename strin
 
 	writer := csv.NewWriter(o)
 	writer.Comma = '\t'
-	writer.Write([]string{"Origin_Start", "Origin_End", "Remapped_Start", "Remmapped_End", "Type"})
+	writer.Write([]string{"Origin_Start", "Origin_End", "Remapped_Start", "Remapped_End", "Type"})
 	g := gappedRegex.FindAllStringSubmatchIndex(seqWithGap, -1)
 	for _, t := range topDom {
 		log.Println(t)

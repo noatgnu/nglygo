@@ -6,15 +6,39 @@ import (
 	"bufio"
 	"io"
 	"strings"
+	"strconv"
 )
 
 type Alignment struct {
-	Header string
-	Alignment map[string]string
-	NoGap map[string]string
-	AncestralNodes []string
-	Length int
+	Header string `json:"header"`
+	Alignment map[string]string `json:"alignment"`
+	NoGap map[string]string	`json:"noGap"`
+	AncestralNodes []string `json:"ancestralNodes"`
+	Length int `json:"length"`
+	SeqIdArray []SeqD3Coordinate `json:"seqIdArray"`
+	ConserveMap map[int]int `json:"conserveMap"`
 }
+
+type SeqD3Coordinate struct {
+	SeqId string `json:"seqId"`
+	YCoord int `json:"yCoord"`
+}
+
+type BySeqId []SeqD3Coordinate
+
+func (s BySeqId) Len() int           { return len(s) }
+func (s BySeqId) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s BySeqId) Less(i, j int) bool {
+	si, err := strconv.Atoi(s[i].SeqId)
+	if err != nil {
+		log.Panicln(err)
+	}
+	sj, err := strconv.Atoi(s[j].SeqId)
+	if err != nil {
+		log.Panicln(err)
+	}
+	return si < sj
+	}
 
 func ReadPhylip(fileName string) (alignment Alignment) {
 	alignment.Alignment = make(map[string]string)

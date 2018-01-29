@@ -16,9 +16,12 @@ import (
 	"github.com/gorilla/handlers"
 	"encoding/csv"
 	"github.com/noatgnu/ancestral/blastwrapper"
+	"github.com/noatgnu/ancestral/alignio"
+	"strconv"
+	"sort"
 )
 
-var root = `C:\Users\localadmin\GoglandProjects\ancestral\result`
+var root = `D:\GoProject\ancestral\result`
 
 type Response struct {
 	DB []CoreDB   `json:"db"`
@@ -37,6 +40,11 @@ type Query struct {
 	HasMotifAnalysis bool `json:"hasMotif"`
 	MotifAnalysisFile string `json:"motifFile"`
 	MotifAnalysis []workflow.BranchMotif `json:"motif"`
+	HasTopDom bool `json:"hasTopDom"`
+	TopDomFile string `json:"topDomFile"`
+	TopDomDF []blastwrapper.TopDom `json:"topDomDF"`
+	Alignment alignio.Alignment `json:"alignment"`
+	AlignmentDF []workflow.AlignmentData `json:"alignmentDF"`
 }
 
 type CoreDB struct {
@@ -51,18 +59,20 @@ func CreateJSON(blastMap workflow.BlastMap) {
 	}
 	jw := json.NewEncoder(f)
 	jw.Encode(blastMap)
+	f.Close()
 }
 
 func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
-	os.MkdirAll(`D:\GoProject\ancestral\result\test1`, os.ModePerm)
+	os.MkdirAll(`D:\GoProject\ancestral\result\test2`, os.ModePerm)
 	query := workflow.LoadQueryTab(`D:\python_projects\datahelper\ancestral_wf\uniprot-glycoprotein.tab`)
 	// workflow.BlastOffline(`D:\python_projects\datahelper\ancestral_wf\glycoprotein.homosapiens.fasta`, `C:\Users\localadmin\GoglandProjects\ancestral\homosapiens.fasta.blast.tsv`, `C:\Users\localadmin\GoglandProjects\ancestral\nr_customDB`)
 	s := workflow.GetSpeciesList(`D:\python_projects\datahelper\ancestral_wf\species.txt`)
 	filtered := make(chan workflow.BlastMap)
-	go workflow.BlastFmt6Parser(`D:\GoProject\ancestral\homosapiens.fasta.blast.tsv`,`D:\GoProject\ancestral\result\test1`, `D:\GoProject\ancestral\nr_customDB`, s, query, filtered)
+	go workflow.BlastFmt6Parser(`D:\GoProject\ancestral\homosapiens.fasta.blast.tsv`,`D:\GoProject\ancestral\result\test2`, `D:\GoProject\ancestral\nr_customDB`, s, query, filtered)
 	sem := make(chan bool, 6)
 	wg := sync.WaitGroup{}
 	for f := range filtered {
+		CreateJSON(f)
 		if f.MatchSourceID != "" {
 			log.Println(f.FileName, "has match")
 		} else {
@@ -71,9 +81,7 @@ func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		sem <- true
 		go func() {
-			CreateJSON(f)
 			workflow.ProcessAlignment(f)
-
 			defer func() {
 				<- sem
 			}()
@@ -205,7 +213,7 @@ func GetQuery (id string, db string, detail bool) Query {
 	}
 	for _, v := range f {
 		if strings.HasSuffix(v, `compiled.filtered.json`) {
-			if detail {
+			if detail == true {
 				fj, err := os.Open(v)
 				if err != nil {
 					log.Panicln(err)
@@ -219,7 +227,7 @@ func GetQuery (id string, db string, detail bool) Query {
 		} else if strings.HasSuffix(v, `.reconstructed.tree.txt`) {
 			query.TreeFile = v
 			query.HasTree = true
-			if detail {
+			if detail == true{
 				fj, err := os.Open(v)
 				if err != nil {
 					log.Panicln(err)
@@ -239,10 +247,86 @@ func GetQuery (id string, db string, detail bool) Query {
 		} else if strings.HasSuffix(v, `compiled.reconstructed.phy`) {
 			query.AlignFile = v
 			query.HasAlign = true
+			motifFile := strings.Replace(v,".reconstructed.phy", ".reconstructed.motifs.txt", -1)
+			hasMotif := false
+			if _, err := os.Stat(motifFile); err == nil {
+				hasMotif = true
+			}
+			topDomPath := strings.Replace(v,".reconstructed.phy", ".reconstructed.topdom.txt", -1)
+			if _, err := os.Stat(topDomPath); err == nil {
+				query.HasTopDom = true
+			}
+			if detail == true{
+				query.Alignment = alignio.ReadPhylip(v)
+				if hasMotif == true {
+					o, err := workflow.ReadTabulatedFile(motifFile)
+					if err != nil {
+						log.Panicln(err)
+					}
+					if o != nil {
+						query.Alignment.ConserveMap = workflow.ConserveCount(o)
+					}
+				}
+				if query.HasTopDom == true {
+					top, err := workflow.ReadTabulatedFile(topDomPath)
+					if err != nil {
+						log.Panicln(err)
+					}
+					if top != nil {
+						query.HasTopDom = true
+						query.TopDomFile = topDomPath
+						query.TopDomDF = workflow.TopDom(top)
+					}
+				}
+
+				totalrow := query.Alignment.Length*len(query.Alignment.Alignment)
+				result := make([]workflow.AlignmentData, totalrow)
+				rowNumb := 0
+				yCoord := 0
+				min := 0
+				max := 0
+				val := 0
+				var seqidarray alignio.BySeqId
+
+				for k := range query.Alignment.Alignment {
+					seqidarray = append(seqidarray, alignio.SeqD3Coordinate{SeqId: k})
+				}
+				sort.Sort(seqidarray)
+
+				for i, v2 := range seqidarray {
+					seqid, err := strconv.Atoi(v2.SeqId)
+					if err != nil {
+						log.Panicln(err)
+					}
+					for pos := 0; pos < query.Alignment.Length; pos ++ {
+						extra := make(map[string]string)
+						for _, td := range query.TopDomDF {
+							if td.Start <= (pos+1) && td.Stop >= (pos+1) {
+								extra["topDomType"] = td.Type
+								break
+							}
+						}
+						result[rowNumb] = workflow.AlignmentData{SeqId: seqid, AA:  query.Alignment.Alignment[v2.SeqId][pos:pos+1], Pos: pos+1, YCoord: yCoord, Value: val, Extra:extra}
+						rowNumb ++
+						if val > max {
+							max = val
+						}
+						if val < min {
+							min = val
+						}
+
+					}
+					seqidarray[i].YCoord = yCoord
+					yCoord += 1
+				}
+
+				query.AlignmentDF = result[:]
+				query.Alignment.SeqIdArray = seqidarray
+			}
 		} else if strings.HasSuffix(v, `compiled.motif.analysis.txt`) {
 			query.MotifAnalysisFile = v
 			query.HasMotifAnalysis = true
-			if detail {
+			if detail == true{
 				query.MotifAnalysis = workflow.ReadMotifAnalysis(v)
 			}
 		}
