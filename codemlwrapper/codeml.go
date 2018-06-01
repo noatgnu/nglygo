@@ -80,7 +80,8 @@ func (c *CodeMLCommandline) Execute() (err error) {
 		log.Printf("Started: Ancestral Sequence Reconstruction (%v)", c.SeqFile)
 		err = cmd.Run()
 		if err != nil {
-			log.Panicln(stderr.String())
+
+			log.Panicln(c.SeqFile + stderr.String())
 		}
 		log.Printf("Finished: Ancestral Sequence Reconstruction (%v)", c.SeqFile)
 	}

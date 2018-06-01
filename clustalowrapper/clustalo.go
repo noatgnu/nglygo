@@ -9,7 +9,12 @@ import (
 	"bufio"
 	"io"
 	"strings"
+	"regexp"
+	"fmt"
 )
+
+const phylipRow = `(\w+)\s+([\w-]+)`
+var phylipRowRegex = regexp.MustCompile(phylipRow)
 
 type ClustalOCommandline struct {
 	Command string
@@ -56,7 +61,7 @@ func (c *ClustalOCommandline) CommandBuild() (commandArray []string, err error) 
 	return commandArray, nil
 }
 
-func (c *ClustalOCommandline) ConvertSequential(fileName string, outName string) (err error) {
+func (c *ClustalOCommandline) ConvertAlignment(fileName string, outName string, outFormat string) (err error) {
 	f, err := os.Open(fileName)
 	buff := bufio.NewReader(f)
 	var header string
@@ -101,8 +106,18 @@ func (c *ClustalOCommandline) ConvertSequential(fileName string, outName string)
 		return err
 	}
 	writer := bufio.NewWriter(f)
-	writer.WriteString(header)
-	writer.WriteString(strings.Join(alignment, "\n"))
+	switch outFormat {
+	case "phylip":
+		writer.WriteString(header)
+		writer.WriteString(strings.Join(alignment, "\n"))
+	case "fasta":
+		for r := range alignment {
+			a := phylipRowRegex.FindAllStringSubmatch(alignment[r], -1)
+			if len(a) >0 {
+				writer.WriteString( fmt.Sprintf(">%s\n%s\n\n", a[0][1], a[0][2]))
+			}
+		}
+	}
 	writer.Flush()
 	f.Close()
 	return err

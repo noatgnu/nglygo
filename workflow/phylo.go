@@ -17,12 +17,17 @@ import (
 	"encoding/csv"
 	"io"
 	"github.com/noatgnu/ancestral/blastwrapper"
+	"github.com/noatgnu/ancestral/fasttreecmdwrapper"
+	"github.com/noatgnu/ancestral/raxmlwrapper"
 )
 
 const nRegexPat = `N`
 var nRegex = regexp.MustCompile(nRegexPat)
 const gappedRegexPat = `-*\w+`
 var gappedRegex = regexp.MustCompile(gappedRegexPat)
+const bootstrapedTree = `\)[\d|\.]+\:`
+var treeRegex = regexp.MustCompile(bootstrapedTree)
+
 
 type BranchMotif struct {
 	Origin string `json:"origin"`
@@ -131,13 +136,22 @@ func CreateAlignment(in string, out string) {
 	c := clustalowrapper.ClustalOCommandline{}
 	c.Command = `D:\clustal-omega-1.2.2-win64\clustalo.exe`
 	c.In = in
-	c.OutFmt = "--outfmt=phylip"
-	c.Out = out+"_inter"
+
+	if strings.HasSuffix(out, "phy"){
+		c.OutFmt = "--outfmt=phylip"
+		c.Out = out+"_inter"
+	} else {
+		c.OutFmt = "--outfmt=fasta"
+		c.Out = out
+	}
 	err := c.Execute()
 	if err != nil {
 		log.Panicln(err)
 	}
-	c.ConvertSequential(out+"_inter", out)
+
+	c.ConvertAlignment(out+"_inter", out, "phylip")
+	c.ConvertAlignment(out, out+".fasta", "fasta")
+
 }
 
 func ReadAlignmentPhylip(filename string, b BlastMap) (map[string][][]int, map[string][][]int, alignio.Alignment, map[string]map[int][]int) {
@@ -153,14 +167,13 @@ func ReadAlignmentPhylip(filename string, b BlastMap) (map[string][][]int, map[s
 	motifMap := make(map[string][][]int)
 	alignedMotifMap := make(map[string][][]int)
 	nResidueAlignedMotifMap := make(map[string]map[int][]int)
-	for k, v := range a.Alignment {
-		var reMap []blastwrapper.TopDom
-		if b.SourceSeq.TopDomain != nil {
-			if k == b.MatchSourceID {
-				log.Print(k, b.MatchSourceID)
-				reMap = RemapTopDom(v, b.SourceSeq.TopDomain, strings.Replace(filename, ".phy", ".topdom.txt", -1))
-			}
+	var reMap []blastwrapper.TopDom
+	if b.SourceSeq.TopDomain != nil {
+		if b.MatchSourceID != "" {
+			reMap = RemapTopDom(a.Alignment[b.MatchSourceID], b.SourceSeq.TopDomain, strings.Replace(filename, ".phy", ".topdom.txt", -1))
 		}
+	}
+	for k, v := range a.Alignment {
 		nResidueAlignedMotifMap[k] = make(map[int][]int)
 		gap := nglycan.MotifParseStringWithGap(v, -1)
 		noGapSeq := strings.Replace(v, "-", "", -1)
@@ -186,13 +199,37 @@ func ReadAlignmentPhylip(filename string, b BlastMap) (map[string][][]int, map[s
 	return motifMap, alignedMotifMap, a, nResidueAlignedMotifMap
 }
 
-func CreateTreeML(in string) {
-	c := phymlwrapper.PhyMLCommandline{}
-	c.Command = `D:\PhyML-3.1\PhyML-3.1_win32.exe`
-	c.In = in
-	err := c.Execute()
-	if err != nil {
-		log.Panicln(err)
+func CreateTreeML(in string, bootstrap int, speed string) {
+	switch speed {
+	case "fast":
+		c := fasttreecmdwrapper.FastMLCommandline{}
+		c.Command = `D:\GoProject\ancestral\FastTree.exe`
+		c.In = in+".fasta"
+		c.Out = in+"_phyml_tree.txt"
+		log.Println(c.Out)
+		err := c.Execute()
+		if err != nil {
+			log.Panicln(err)
+		}
+	case "moderate":
+		c := raxmlwrapper.RaxMLCommandline{}
+		c.Command = `D:\GoProject\ancestral\FastTree.exe`
+		c.In = in
+		c.Out = in+"_phyml_tree.txt"
+		log.Println(c.Out)
+		err := c.Execute()
+		if err != nil {
+			log.Panicln(err)
+		}
+	case "slow":
+		c := phymlwrapper.PhyMLCommandline{}
+		c.Command = `D:\PhyML-3.1\PhyML-3.1_win32.exe`
+		c.In = in
+		c.Bootstrap = bootstrap
+		err := c.Execute()
+		if err != nil {
+			log.Panicln(err)
+		}
 	}
 }
 
@@ -265,7 +302,7 @@ func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int, bm B
 	}
 	defer f.Close()
 	writer := bufio.NewWriter(f)
-	writer.WriteString("Origin\tTarget\tPosition_Source\tOrigin_Aligned_Start\tOrigin_Aligned_End\tOrigin_Seq\tTarget_Aligned_Start\tTarget_Aligned_End\tTarget_Seq\tMotif_Status\tExpanded_Origin_Start\tExpanded_Origin_End\tExpanded_Origin_Seq\tExpanded_Target_Start\tExpanded_Target_End\tExpanded_Target_seq\n")
+	writer.WriteString("Origin\tTarget\tPosition_Source\tOrigin_Aligned_Start\tOrigin_Aligned_End\tOrigin_Seq\tTarget_Aligned_Start\tTarget_Aligned_End\tTarget_Seq\tExpanded_Origin_Start\tExpanded_Origin_End\tExpanded_Origin_Seq\tExpanded_Target_Start\tExpanded_Target_End\tExpanded_Target_seq\tMotif_Status\n")
 
 	for _, b := range branches {
 		conservedChecked := make(map[int]bool)
@@ -380,12 +417,47 @@ func CombineTree(a codemlwrapper.CodeMLCommandline) {
 	}
 }
 
-func ProcessAlignment(b BlastMap) {
+func ProcessAlignment(b BlastMap, asr bool) {
 	log.Printf("Started: Phylogeny Construction (%v)", b.FileName)
 	alignmentFile := strings.Replace(b.FileName, ".filtered.fasta", ".phy", -1)
 	CreateAlignment(b.FileName, alignmentFile)
-	CreateTreeML(alignmentFile)
-	ASR(alignmentFile,alignmentFile+"_phyml_tree.txt", strings.Replace(alignmentFile, ".phy", ".asr", -1), b)
+	if asr == true {
+		CreateTreeML(alignmentFile, 1000, "fast")
+		f, err := os.Open(alignmentFile+"_phyml_tree.txt")
+		if err != nil {
+			log.Panicln(err)
+		}
+		reader := bufio.NewScanner(f)
+		w, err := os.Create(alignmentFile+"_phyml_tree_reformated.txt")
+		if err != nil {
+			log.Panicln(err)
+		}
+		writer := bufio.NewWriter(w)
+		for reader.Scan() {
+			line := reader.Text()
+			matches := treeRegex.FindAllStringSubmatchIndex(line, -1)
+			replaced := make(map[string]bool)
+			if len(matches) > 0 {
+				for _, m := range matches {
+					r := line[m[0]:m[1]]
+					if _, ok := replaced[r]; !ok {
+						replaced[r] = true
+					}
+				}
+			}
+			for k := range replaced {
+				line = strings.Replace(line, k, "):", -1)
+			}
+			writer.WriteString(line)
+		}
+		writer.Flush()
+		defer w.Close()
+		defer f.Close()
+
+		ASR(alignmentFile,alignmentFile+"_phyml_tree_reformated.txt", strings.Replace(alignmentFile, ".phy", ".asr", -1), b)
+	} else {
+		ReadAlignmentPhylip(alignmentFile, b)
+	}
 }
 
 func ExpandSequence(numberForward int, numberBackward int, sequence string, start int, end int, ignoreCharacter string) (startPosition int, endPosition int) {
@@ -429,39 +501,58 @@ func RemapTopDom(seqWithGap string, topDom []blastwrapper.TopDom, filename strin
 	if err != nil {
 		log.Panicln(err)
 	}
-
+	log.Println(seqWithGap)
 	writer := csv.NewWriter(o)
 	writer.Comma = '\t'
 	writer.Write([]string{"Origin_Start", "Origin_End", "Remapped_Start", "Remapped_End", "Type"})
 	g := gappedRegex.FindAllStringSubmatchIndex(seqWithGap, -1)
+
 	for _, t := range topDom {
-		log.Println(t)
 		gap := 0
 		startCheck := false
 		endCheck := false
 		td := blastwrapper.TopDom{}
-		for _, v := range g {
-
-			seq := seqWithGap[v[0]:v[1]]
-			gap += strings.Count(seq, "-")
-			if startCheck == false {
-				if (v[0] <= (t.Start+gap)) && (v[1] <(t.Start+gap)) {
-					td.Start = t.Start+gap
-					startCheck = true
+		if strings.Contains(seqWithGap[0:t.Start], "-") == true {
+			for _, v := range g {
+				seq := seqWithGap[v[0]:v[1]]
+				gap += strings.Count(seq, "-")
+				if startCheck == false {
+					if (v[0] <= (t.Start+gap-1)) && (v[1] >(t.Start+gap)) {
+						td.Start = t.Start+gap
+						startCheck = true
+					}
+				}
+				if endCheck == false {
+					if (v[0] <= (t.Stop+gap)) && (v[1] >= (t.Stop+gap)) {
+						td.Stop = t.Stop+gap
+						endCheck = true
+					}
+				}
+				if (startCheck == true) && (endCheck == true) {
+					break
 				}
 			}
-			if endCheck == false {
-				if (v[0] <= (t.Stop+gap)) && (v[1] >= (t.Stop+gap)) {
-					td.Stop = t.Stop+gap
-					endCheck = true
+		} else {
+			td.Start = t.Start
+			if strings.Contains(seqWithGap[t.Start-1:t.Stop], "-") == true {
+				for _, v := range g {
+					seq := seqWithGap[v[0]:v[1]]
+					gap += strings.Count(seq, "-")
+					if endCheck == false {
+						if (v[0] <= (t.Stop+gap)) && (v[1] >= (t.Stop+gap)) {
+							td.Stop = t.Stop+gap
+							endCheck = true
+							break
+						}
+					}
 				}
-			}
-			if (startCheck == true) && (endCheck == true) {
-				td.Type = t.Type
-				writer.Write([]string{strconv.Itoa(t.Start), strconv.Itoa(t.Stop), strconv.Itoa(td.Start), strconv.Itoa(td.Stop), t.Type})
-				break
+			} else {
+				td.Stop = t.Stop
 			}
 		}
+		td.Type = t.Type
+		log.Println(t, td)
+		writer.Write([]string{strconv.Itoa(t.Start), strconv.Itoa(t.Stop), strconv.Itoa(td.Start), strconv.Itoa(td.Stop), t.Type})
 		reMapped = append(reMapped, td)
 	}
 	writer.Flush()

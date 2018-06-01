@@ -63,25 +63,68 @@ func CreateJSON(blastMap workflow.BlastMap) {
 }
 
 func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
-	os.MkdirAll(`D:\GoProject\ancestral\result\test2`, os.ModePerm)
-	query := workflow.LoadQueryTab(`D:\python_projects\datahelper\ancestral_wf\uniprot-glycoprotein.tab`)
-	// workflow.BlastOffline(`D:\python_projects\datahelper\ancestral_wf\glycoprotein.homosapiens.fasta`, `C:\Users\localadmin\GoglandProjects\ancestral\homosapiens.fasta.blast.tsv`, `C:\Users\localadmin\GoglandProjects\ancestral\nr_customDB`)
-	s := workflow.GetSpeciesList(`D:\python_projects\datahelper\ancestral_wf\species.txt`)
-	filtered := make(chan workflow.BlastMap)
-	go workflow.BlastFmt6Parser(`D:\GoProject\ancestral\homosapiens.fasta.blast.tsv`,`D:\GoProject\ancestral\result\test2`, `D:\GoProject\ancestral\nr_customDB`, s, query, filtered)
-	sem := make(chan bool, 6)
+	workPool := 6
+
+	speciesFile := `C:\Users\localadmin\GoglandProjects\ancestral\species.txt`
+	outputFolder := `D:\GoProject\ancestral\result\test13`
+	queryInfoFile := `C:\Users\localadmin\GoglandProjects\ancestral\uniprot-glycoprotein.tab`
+	queryFastaFile := `D:\GoProject\ancestral\uniprot-homosapiens.fasta`
+	outputBlast := `D:\GoProject\ancestral\homosapiens1.fasta.blast.tsv`
+	blastDB := `C:\Users\localadmin\GoglandProjects\ancestral\nr_customDB`
+
+/*	speciesFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\neuraminidase.sepecies.txt`
+	outputFolder := `D:\GoProject\ancestral\result\test7`
+	queryInfoFile := `C:\Users\localadmin\Downloads\uniprot-yourlist_M20180208A7434721E10EE6586998A056CCD0537E395F70S.tab`
+	queryFastaFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\neura.fasta`
+	outputBlast := `C:\Users\localadmin\PycharmProjects\ancestralplay\neura.fasta.blast.tsv`
+	blastDB := `D:\GoProject\ancestral\neuraminidase_customDB`
+*/
+	os.MkdirAll(outputFolder, os.ModePerm)
+	query := workflow.LoadQueryTab(queryInfoFile)
+	targetNum := 500
+	if _, err := os.Stat(outputBlast); os.IsNotExist(err) {
+		workflow.BlastOffline(queryFastaFile, outputBlast, blastDB, targetNum)
+	}
+
+	s := workflow.GetSpeciesList(speciesFile)
+
+	asr := true
+	bm := workflow.ConcurrentBlastMap{}
+	work := filepath.Join(outputFolder, "work.json")
+	if _, err := os.Stat(work); os.IsNotExist(err) {
+		f, err := os.Create(work)
+		if err != nil {
+			log.Println(err)
+		}
+		bm = workflow.BlastFmt6Parser(outputBlast,outputFolder, blastDB, s, query)
+		encoder := json.NewEncoder(f)
+		encoder.Encode(bm)
+		defer f.Close()
+	} else {
+		f, err := os.Open(work)
+		if err != nil {
+			log.Println(err)
+		}
+		decoder := json.NewDecoder(f)
+		decoder.Decode(&bm)
+		defer f.Close()
+	}
+
+	sem := make(chan bool, workPool)
 	wg := sync.WaitGroup{}
-	for f := range filtered {
-		CreateJSON(f)
-		if f.MatchSourceID != "" {
-			log.Println(f.FileName, "has match")
+
+	log.Println("Finished Parsing Blast Output")
+	for _, v := range bm.Items {
+		CreateJSON(v)
+		if v.MatchSourceID != "" {
+			log.Println(v.FileName, "has match")
 		} else {
-			log.Println(f.FileName, "no match")
+			log.Println(v.FileName, "no match")
 		}
 		wg.Add(1)
 		sem <- true
 		go func() {
-			workflow.ProcessAlignment(f)
+			workflow.ProcessAlignment(v, asr)
 			defer func() {
 				<- sem
 			}()
@@ -89,6 +132,7 @@ func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	wg.Wait()
+	log.Println("Finished.")
 }
 
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
@@ -97,11 +141,12 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 
 func MakeBlastDBHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		f := `D:\python_projects\datahelper\ancestral_wf\nr`
-		fo := `D:\python_projects\datahelper\ancestral_wf\nr_filtered`
-		s := `D:\python_projects\datahelper\ancestral_wf\species.txt`
+		f := `C:\Users\localadmin\PycharmProjects\ancestralplay\neuraminidase.fasta`
+		fo := `C:\Users\localadmin\PycharmProjects\ancestralplay\neuraminidase.fasta_filtered`
+		s := `C:\Users\localadmin\PycharmProjects\ancestralplay\neuraminidase.sepecies.txt`
 		workflow.PreProcessDB(f, fo, s)
-		o := `D:\GoProject\ancestral\nr_customDB`
+		log.Println(f, fo, s)
+		o := `D:\GoProject\ancestral\neuraminidase_customDB`
 		workflow.CreateCustomDB(fo, o)
 	}
 }
@@ -164,7 +209,7 @@ func BlastPHandler(w http.ResponseWriter, r *http.Request){
 	o.Close()
 
 	if r.Method == "GET" {
-		workflow.BlastOffline(`D:\GoProject\ancestral\uniprot-homosapiens.fasta`, `D:\GoProject\ancestral\homosapiens.fasta.blast.tsv`, `D:\GoProject\ancestral\nr_customDB`)
+		workflow.BlastOffline(`C:\Users\localadmin\PycharmProjects\ancestralplay\hema.fasta`, `C:\Users\localadmin\PycharmProjects\ancestralplay\hema.fasta.blast.tsv`, `D:\GoProject\ancestral\hemagglutinin_customDB`, 500)
 	}
 }
 

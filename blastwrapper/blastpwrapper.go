@@ -17,6 +17,7 @@ type NcbiBlastpCommandline struct {
 	NumThreads int
 	Out        string
 	OutFmt     string
+	MaxTargetSeqs int
 	CommandLine
 }
 
@@ -71,6 +72,10 @@ func (b *NcbiBlastpCommandline) CommandBuild() (commandArray []string, err error
 
 	if b.NumThreads != 0 {
 		commandArray = append(commandArray, "-num_threads", strconv.Itoa(b.NumThreads))
+	}
+
+	if b.MaxTargetSeqs != 0 {
+		commandArray = append(commandArray, "-max_target_seqs", strconv.Itoa(b.MaxTargetSeqs))
 	}
 
 	if b.Out != "" {

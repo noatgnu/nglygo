@@ -6,9 +6,11 @@ import (
 	"strings"
 )
 
-const OrganismRegexPat = `\[([\w\s]+)\]`
-
+//const OrganismRegexPat = `\[([\w\s\(\)/]+)\]`
+const OrganismRegexPat = `\[([^\]]+)\]`
+const Species = `[\w|\s]+`
 var OrgRegex = regexp.MustCompile(OrganismRegexPat)
+var SpeciesRegex = regexp.MustCompile(Species)
 
 type CommandLine interface {
 	Execute() error
@@ -55,23 +57,37 @@ func SeqQualityControl(seq PrimeSeq, partialCheck bool) (quality bool) {
 	return true
 }
 
-func SeqFilterOrganism(seq PrimeSeq, organisms []string, removeFound bool) (check bool, organismLeft []string, found string) {
-	org := OrgRegex.FindString(seq.Id)
+func SeqFilterOrganism(seq PrimeSeq, organisms []string, removeFound bool, collect map[string]bool) (check bool, organismLeft []string, found string) {
+	org := ""
+	if seq.Species != "" {
+		org = SpeciesRegex.FindString(seq.Species)
+		org = strings.TrimSpace(org)
+	} else {
+		org = OrgRegex.FindString(seq.Id)
+	}
+
+	//log.Println(seq.Id)
+	//log.Println(org)
 	if org != "" {
-		for _, v := range organisms {
-			if strings.Contains(strings.ToLower(org), strings.ToLower(v)) {
-				if removeFound {
-					var arr []string
-					for _, a := range organisms{
-						if a != v {
-							arr = append(arr, a)
+		if _, ok := collect[seq.Seq]; !ok {
+			for _, v := range organisms {
+				if strings.Contains(strings.ToLower(org), strings.ToLower(v)) {
+					if removeFound {
+						var arr []string
+						for _, a := range organisms{
+							if a != v {
+								arr = append(arr, a)
+							}
 						}
+						collect[seq.Seq] = true
+						return true, arr, v
 					}
-					return true, arr, v
+					collect[seq.Seq] = true
+					return true, organisms, v
 				}
-				return true, organisms, v
 			}
 		}
+
 	}
 	return false, nil, ""
 }

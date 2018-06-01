@@ -47,7 +47,7 @@ func FilterBlastDBByOrganisms(f *os.File, organisms []string, c chan blastwrappe
 
 func FilterBlastDB(filename string, organisms []string, output string) {
 	log.Println(filename)
-	log.Println(organisms)
+
 	c := make(chan blastwrapper.PrimeSeq)
 	f, err := os.Open(filename)
 	if err != nil {
@@ -59,14 +59,17 @@ func FilterBlastDB(filename string, organisms []string, output string) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	defer outfile.Close()
+
 	writer := bufio.NewWriter(outfile)
 
 	for s := range c {
 		writer.WriteString(s.ToString())
 	}
 
+	log.Println("Completed blast DB Filtering")
 	defer writer.Flush()
+	defer outfile.Close()
+	defer f.Close()
 }
 
 func GetSpeciesList(filename string) []string {
@@ -83,7 +86,7 @@ func GetSpeciesList(filename string) []string {
 func PreProcessDB(filename string, output string, speciesFilename string) {
 	organisms := GetSpeciesList(speciesFilename)
 	log.Println("Started")
-	FilterBlastDB(`D:\python_projects\datahelper\ancestral_wf\nr`, organisms, output)
+	FilterBlastDB(filename, organisms, output)
 }
 
 func CreateCustomDB(filename string, outfileName string) {
