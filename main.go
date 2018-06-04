@@ -66,7 +66,7 @@ func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 	workPool := 6
 
 	speciesFile := `C:\Users\localadmin\GoglandProjects\ancestral\species.txt`
-	outputFolder := `D:\GoProject\ancestral\result\test13`
+	outputFolder := `D:\GoProject\ancestral\result\test14`
 	queryInfoFile := `C:\Users\localadmin\GoglandProjects\ancestral\uniprot-glycoprotein.tab`
 	queryFastaFile := `D:\GoProject\ancestral\uniprot-homosapiens.fasta`
 	outputBlast := `D:\GoProject\ancestral\homosapiens1.fasta.blast.tsv`
@@ -96,7 +96,8 @@ func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Println(err)
 		}
-		bm = workflow.BlastFmt6Parser(outputBlast,outputFolder, blastDB, s, query)
+
+		bm = workflow.BlastFmt6Parser(outputBlast,outputFolder, blastDB, s, query, workPool)
 		encoder := json.NewEncoder(f)
 		encoder.Encode(bm)
 		defer f.Close()

@@ -234,7 +234,8 @@ func QCFmt6Query(filename string, db string, outFilename string) {
 	}
 }
 
-func BlastFmt6Parser(filename string, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq) ConcurrentBlastMap {
+func BlastFmt6Parser(filename string, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq, workPool int) ConcurrentBlastMap {
+	log.Printf("Processing Blast FMT6 File %v", filename)
 	fmt6Chan := make(chan fmt6Query)
 
 	f, err := os.Open(filename)
@@ -261,8 +262,9 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 
 			if fmt6q.Query != r[0] {
 				if fmt6q.Query != "" {
-					fmt6Chan <- fmt6q
+					fmt6Chan <- fmt6Query{fmt6q.Query, fmt6q.Matches[:]}
 				}
+
 				fmt6q.Query = r[0]
 				fmt6q.Matches = []string{}
 			}
@@ -271,33 +273,25 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 				fmt6q.Matches = append(fmt6q.Matches, r[1])
 			}
 			//fmt6q.Matches = append(fmt6q.Matches, r[1])
-
+		}
+		if len(fmt6q.Matches) >0 {
+			fmt6Chan <- fmt6q
 		}
 		close(fmt6Chan)
 	} ()
 
 	//CreateBlastDBCMDFile(compiledMatches, fmt6Chan)
 	var bm ConcurrentBlastMap
+	sem := make(chan bool, workPool)
 	wg := sync.WaitGroup{}
 	for fmt6 := range fmt6Chan {
-		folderName := strings.Replace(fmt6.Query, "|", "_", -1)
-		compiledMatches := filepath.Join(outDirectory, folderName)
-		os.MkdirAll(compiledMatches, os.ModePerm)
-		fName := filepath.Join(compiledMatches, "compiled.txt")
-		err = CreateMatchesFile(fName, fmt6)
-		if err != nil {
-			log.Panicln(err)
-		}
 		wg.Add(1)
-		outName := strings.Replace(fName, "txt", "fasta", -1)
-		QCFmt6Query(fName, db, outName)
+		sem <- true
 		go func() {
-			r, err := FilterMatchFile(organisms, BlastDBCMDResult{fmt6.Query, queryMap[fmt6.Query], outName})
-			if err != nil {
-				log.Println(err)
-			} else {
-				bm.Append(r)
-			}
+			ProcessFMT6Query(fmt6, outDirectory, db, organisms, queryMap, &bm)
+			defer func() {
+				<- sem
+			}()
 			wg.Done()
 		}()
 
@@ -306,8 +300,32 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 
 	log.Println("Finished: Parsing Blast Output.")
 	//close(filtered)
+	log.Println(bm.Items)
 	return bm
+}
+
+func ProcessFMT6Query(fmt6 fmt6Query, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq, bm *ConcurrentBlastMap) {
+	log.Printf("Processing %v", fmt6.Query)
+	folderName := strings.Replace(fmt6.Query, "|", "_", -1)
+	compiledMatches := filepath.Join(outDirectory, folderName)
+	err := os.MkdirAll(compiledMatches, os.ModePerm)
+	if err != nil {
+		log.Panicln(err)
 	}
+	fName := filepath.Join(compiledMatches, "compiled.txt")
+	err = CreateMatchesFile(fName, fmt6)
+	if err != nil {
+		log.Panicln(err)
+	}
+	outName := strings.Replace(fName, "txt", "fasta", -1)
+	QCFmt6Query(fName, db, outName)
+	r, err := FilterMatchFile(organisms, BlastDBCMDResult{fmt6.Query, queryMap[fmt6.Query], outName})
+	if err != nil {
+		log.Println(err)
+	} else {
+		bm.Append(r)
+	}
+}
 
 func FilterMatchFile(organisms []string, query BlastDBCMDResult) (BlastMap, error) {
 	outFile := strings.Replace(query.Filename, ".fasta", ".filtered.fasta", -1)

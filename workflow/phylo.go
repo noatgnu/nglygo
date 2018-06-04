@@ -448,11 +448,15 @@ func ProcessAlignment(b BlastMap, asr bool) {
 			for k := range replaced {
 				line = strings.Replace(line, k, "):", -1)
 			}
-			writer.WriteString(line)
+			writer.WriteString(line + "\n")
+		}
+		if err := reader.Err(); err != nil {
+			log.Panicln(err)
 		}
 		writer.Flush()
-		defer w.Close()
-		defer f.Close()
+
+		f.Close()
+		w.Close()
 
 		ASR(alignmentFile,alignmentFile+"_phyml_tree_reformated.txt", strings.Replace(alignmentFile, ".phy", ".asr", -1), b)
 	} else {

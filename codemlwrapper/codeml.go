@@ -72,6 +72,7 @@ func (c *CodeMLCommandline) Execute() (err error) {
 		return err
 	}
 	if commandArray != nil {
+		log.Println(commandArray)
 		cmd := exec.Command(commandArray[0], commandArray[1:]...)
 		dir, _ := filepath.Split(c.SeqFile)
 		var stderr bytes.Buffer
@@ -149,13 +150,13 @@ func (c *CodeMLCommandline) ReadSupplemental() (branches []Branch) {
 	if err != nil {
 		log.Panicln(err)
 	}
-	defer f.Close()
+
 	buff := bufio.NewReader(f)
 	bf, err := os.Create(c.SeqFile+"_branch")
 	if err != nil {
 		log.Panicln(err)
 	}
-	defer bf.Close()
+
 	writer := bufio.NewWriter(bf)
 	writer.WriteString("Origin\tTarget\tPosition\tOrigin_Residue\tStats\tTarget_Residue\n")
 	//branches = make(map[string]*Branch)
@@ -183,6 +184,8 @@ func (c *CodeMLCommandline) ReadSupplemental() (branches []Branch) {
 		}
 	}
 	writer.Flush()
+	f.Close()
+	bf.Close()
 	return branches
 }
 
@@ -217,7 +220,7 @@ func WriteReconstructedAlignment(filename string, buff *bufio.Reader) {
 	if err != nil {
 		log.Panicln(err)
 	}
-	defer af.Close()
+
 	writer := bufio.NewWriter(af)
 	alignmentStarted := false
 	started := false
@@ -225,7 +228,6 @@ func WriteReconstructedAlignment(filename string, buff *bufio.Reader) {
 		r, err := buff.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
-				writer.Flush()
 				break
 			}
 			log.Panicln(err)
@@ -245,13 +247,15 @@ func WriteReconstructedAlignment(filename string, buff *bufio.Reader) {
 				if !alignmentStarted {
 					alignmentStarted = true
 				}  else {
-					writer.Flush()
 					break
 				}
 			}
 
 		}
 	}
+	writer.Flush()
+	af.Close()
+	log.Printf("Wrote Reconstructed Alignment for %v", filename)
 }
 
 func ReadBranch(buff *bufio.Reader, branch *Branch, writer *bufio.Writer) {

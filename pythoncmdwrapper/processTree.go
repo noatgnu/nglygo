@@ -4,6 +4,7 @@ import (
 	"github.com/noatgnu/ancestral/blastwrapper"
 	"errors"
 	"os/exec"
+	"log"
 )
 
 type ProcessTreeCommandline struct {
@@ -21,6 +22,7 @@ func (p *ProcessTreeCommandline) Execute() (err error) {
 		return err
 	}
 	if commandArray != nil {
+		log.Println(commandArray)
 		cmd := exec.Command(commandArray[0], commandArray[1:]...)
 		err = cmd.Run()
 		if err != nil {

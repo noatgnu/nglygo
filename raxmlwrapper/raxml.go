@@ -27,7 +27,7 @@ func (p *RaxMLCommandline) Execute() (err error) {
 		return err
 	}
 	if commandArray !=nil {
-		print(commandArray)
+		log.Println(commandArray)
 		cmd := exec.Command(commandArray[0], commandArray[1:]...)
 		log.Printf("Started: Creating Phylogenetic Tree (%v)", p.In)
 		cmd.Run()
