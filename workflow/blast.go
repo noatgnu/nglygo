@@ -50,8 +50,8 @@ type ConcurrentBlastMap struct {
 
 func (cbm *ConcurrentBlastMap) Append(bm BlastMap) {
 	cbm.Lock()
-	defer cbm.Unlock()
 	cbm.Items = append(cbm.Items, bm)
+	cbm.Unlock()
 }
 
 var fmt6Column = []string{"qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"}
@@ -250,13 +250,14 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 		var fmt6q fmt6Query
 		for {
 			r, err := c.Read()
-			if err != nil {
-				if err == io.EOF {
-					if fmt6q.Query != "" {
-						fmt6Chan <- fmt6q
-					}
-					break
+			if err == io.EOF {
+				if fmt6q.Query != "" {
+					fmt6Chan <- fmt6Query{fmt6q.Query, fmt6q.Matches[:]}
 				}
+				break
+			}
+			if err != nil {
+
 				log.Fatalln(err)
 			}
 
@@ -274,9 +275,6 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 			}
 			//fmt6q.Matches = append(fmt6q.Matches, r[1])
 		}
-		if len(fmt6q.Matches) >0 {
-			fmt6Chan <- fmt6q
-		}
 		close(fmt6Chan)
 	} ()
 
@@ -287,14 +285,14 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 	for fmt6 := range fmt6Chan {
 		wg.Add(1)
 		sem <- true
+		log.Println(fmt6.Query)
 		go func() {
 			ProcessFMT6Query(fmt6, outDirectory, db, organisms, queryMap, &bm)
 			defer func() {
-				<- sem
+				<-sem
 			}()
 			wg.Done()
 		}()
-
 	}
 	wg.Wait()
 
@@ -302,6 +300,10 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 	//close(filtered)
 	log.Println(bm.Items)
 	return bm
+}
+
+func Process(fmt6 fmt6Query, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq, bm ConcurrentBlastMap, sem chan bool, wg sync.WaitGroup) {
+
 }
 
 func ProcessFMT6Query(fmt6 fmt6Query, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq, bm *ConcurrentBlastMap) {

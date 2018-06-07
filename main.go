@@ -63,6 +63,7 @@ func CreateJSON(blastMap workflow.BlastMap) {
 }
 
 func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println(r.Header)
 	workPool := 6
 
 	speciesFile := `C:\Users\localadmin\GoglandProjects\ancestral\species.txt`
@@ -100,7 +101,7 @@ func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 		bm = workflow.BlastFmt6Parser(outputBlast,outputFolder, blastDB, s, query, workPool)
 		encoder := json.NewEncoder(f)
 		encoder.Encode(bm)
-		defer f.Close()
+		f.Close()
 	} else {
 		f, err := os.Open(work)
 		if err != nil {
@@ -108,13 +109,14 @@ func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		decoder := json.NewDecoder(f)
 		decoder.Decode(&bm)
-		defer f.Close()
+		f.Close()
 	}
 
 	sem := make(chan bool, workPool)
 	wg := sync.WaitGroup{}
 
 	log.Println("Finished Parsing Blast Output")
+	count := 0
 	for _, v := range bm.Items {
 		CreateJSON(v)
 		if v.MatchSourceID != "" {
@@ -124,6 +126,8 @@ func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		wg.Add(1)
 		sem <- true
+		count ++
+		log.Println(count)
 		go func() {
 			workflow.ProcessAlignment(v, asr)
 			defer func() {

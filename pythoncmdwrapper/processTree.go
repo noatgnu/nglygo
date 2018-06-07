@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os/exec"
 	"log"
+	"bytes"
 )
 
 type ProcessTreeCommandline struct {
@@ -24,9 +25,12 @@ func (p *ProcessTreeCommandline) Execute() (err error) {
 	if commandArray != nil {
 		log.Println(commandArray)
 		cmd := exec.Command(commandArray[0], commandArray[1:]...)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
 		err = cmd.Run()
+
 		if err != nil {
-			return err
+			return errors.New(stderr.String())
 		}
 	}
 	return err

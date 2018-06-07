@@ -19,6 +19,7 @@ import (
 	"github.com/noatgnu/ancestral/blastwrapper"
 	"github.com/noatgnu/ancestral/fasttreecmdwrapper"
 	"github.com/noatgnu/ancestral/raxmlwrapper"
+	"path/filepath"
 )
 
 const nRegexPat = `N`
@@ -265,7 +266,8 @@ func ASR(seq string, tree string, out string, bm BlastMap) {
 	if err != nil {
 		log.Panicln(err)
 	}
-	branches := a.ReadSupplemental()
+	dir, _ := filepath.Split(a.SeqFile)
+	branches := a.ReadSupplemental(filepath.Join(dir, "rst"))
 	MotifAnalysis(seq, branches, 0, bm)
 	CombineTree(a)
 }
@@ -407,7 +409,7 @@ func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int, bm B
 func CombineTree(a codemlwrapper.CodeMLCommandline) {
 	p := pythoncmdwrapper.ProcessTreeCommandline{}
 	p.Command = `C:\Program Files\Anaconda3\python.exe`
-	p.Program = `C:\Users\localadmin\GoglandProjects\ancestral\src\github.com\noatgnu\ancestral\processtree.py`
+	p.Program = `D:\GoProject\ancestral\src\github.com\noatgnu\ancestral\processtree.py`
 	p.CurrentTree = a.TreeFile
 	p.Reconstructed = strings.Replace(a.TreeFile, "_tree", "_reconstructed_tree", -1)
 	p.Out = strings.Replace(p.Reconstructed, ".txt", ".reconstructed.tree.txt", -1)
@@ -423,45 +425,49 @@ func ProcessAlignment(b BlastMap, asr bool) {
 	CreateAlignment(b.FileName, alignmentFile)
 	if asr == true {
 		CreateTreeML(alignmentFile, 1000, "fast")
-		f, err := os.Open(alignmentFile+"_phyml_tree.txt")
-		if err != nil {
-			log.Panicln(err)
-		}
-		reader := bufio.NewScanner(f)
-		w, err := os.Create(alignmentFile+"_phyml_tree_reformated.txt")
-		if err != nil {
-			log.Panicln(err)
-		}
-		writer := bufio.NewWriter(w)
-		for reader.Scan() {
-			line := reader.Text()
-			matches := treeRegex.FindAllStringSubmatchIndex(line, -1)
-			replaced := make(map[string]bool)
-			if len(matches) > 0 {
-				for _, m := range matches {
-					r := line[m[0]:m[1]]
-					if _, ok := replaced[r]; !ok {
-						replaced[r] = true
-					}
-				}
-			}
-			for k := range replaced {
-				line = strings.Replace(line, k, "):", -1)
-			}
-			writer.WriteString(line + "\n")
-		}
-		if err := reader.Err(); err != nil {
-			log.Panicln(err)
-		}
-		writer.Flush()
+		ReformatBootstrappedTree(alignmentFile)
 
-		f.Close()
-		w.Close()
-
-		ASR(alignmentFile,alignmentFile+"_phyml_tree_reformated.txt", strings.Replace(alignmentFile, ".phy", ".asr", -1), b)
+		ASR(alignmentFile, alignmentFile+"_phyml_tree_reformated.txt", strings.Replace(alignmentFile, ".phy", ".asr", -1), b)
 	} else {
 		ReadAlignmentPhylip(alignmentFile, b)
 	}
+}
+
+func ReformatBootstrappedTree(alignmentFile string) {
+
+	f, err := os.Open(alignmentFile + "_phyml_tree.txt")
+	if err != nil {
+		log.Panicln(err)
+	}
+	reader := bufio.NewReader(f)
+	w, err := os.Create(alignmentFile + "_phyml_tree_reformated.txt")
+	if err != nil {
+		log.Panicln(err)
+	}
+	writer := bufio.NewWriter(w)
+	r, _, err := reader.ReadLine()
+	if err != nil {
+		log.Panicln(err)
+	}
+	line := strings.TrimSpace(string(r[:]))
+	log.Printf("Reformatting Bootstrapped Tree %v", line)
+	matches := treeRegex.FindAllStringSubmatchIndex(line, -1)
+	replaced := make(map[string]bool)
+	if len(matches) > 0 {
+		for _, m := range matches {
+			r := line[m[0]:m[1]]
+			if _, ok := replaced[r]; !ok {
+				replaced[r] = true
+			}
+		}
+	}
+	for k := range replaced {
+		line = strings.Replace(line, k, "):", -1)
+	}
+	writer.WriteString(line + "\n")
+	writer.Flush()
+	f.Close()
+	w.Close()
 }
 
 func ExpandSequence(numberForward int, numberBackward int, sequence string, start int, end int, ignoreCharacter string) (startPosition int, endPosition int) {
@@ -512,13 +518,17 @@ func RemapTopDom(seqWithGap string, topDom []blastwrapper.TopDom, filename strin
 	g := gappedRegex.FindAllStringSubmatchIndex(seqWithGap, -1)
 
 	for _, t := range topDom {
+		log.Println(t)
 		gap := 0
 		startCheck := false
 		endCheck := false
 		td := blastwrapper.TopDom{}
-		if strings.Contains(seqWithGap[0:t.Start], "-") == true {
+		sequence := seqWithGap[0:t.Start]
+		log.Println(sequence)
+		if strings.Contains(sequence, "-") {
 			for _, v := range g {
 				seq := seqWithGap[v[0]:v[1]]
+				log.Println(seq)
 				gap += strings.Count(seq, "-")
 				if startCheck == false {
 					if (v[0] <= (t.Start+gap-1)) && (v[1] >(t.Start+gap)) {

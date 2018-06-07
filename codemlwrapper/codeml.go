@@ -78,13 +78,12 @@ func (c *CodeMLCommandline) Execute() (err error) {
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
 		cmd.Dir = dir
-		log.Printf("Started: Ancestral Sequence Reconstruction (%v)", c.SeqFile)
+		log.Printf("Started: Ancestral Sequence Reconstruction (%v)", cmd.Dir)
 		err = cmd.Run()
 		if err != nil {
-
 			log.Panicln(c.SeqFile + stderr.String())
 		}
-		log.Printf("Finished: Ancestral Sequence Reconstruction (%v)", c.SeqFile)
+		log.Printf("Finished: Ancestral Sequence Reconstruction (%v)", cmd.Dir)
 	}
 	return err
 }
@@ -144,13 +143,13 @@ func (c *CodeMLCommandline) BuildCtl(fileName string) (err error) {
 	return err
 }
 
-func (c *CodeMLCommandline) ReadSupplemental() (branches []Branch) {
-	dir, _ := filepath.Split(c.SeqFile)
-	f, err := os.Open(filepath.Join(dir, "rst"))
+func (c *CodeMLCommandline) ReadSupplemental(path string) (branches []Branch) {
+
+	f, err := os.Open(path)
 	if err != nil {
 		log.Panicln(err)
 	}
-
+	log.Printf("Reading rst file %v", path)
 	buff := bufio.NewReader(f)
 	bf, err := os.Create(c.SeqFile+"_branch")
 	if err != nil {
@@ -160,62 +159,75 @@ func (c *CodeMLCommandline) ReadSupplemental() (branches []Branch) {
 	writer := bufio.NewWriter(bf)
 	writer.WriteString("Origin\tTarget\tPosition\tOrigin_Residue\tStats\tTarget_Residue\n")
 	//branches = make(map[string]*Branch)
-	for {
-		r, err := buff.ReadString('\n')
-		if err != nil {
+	lineChan := make(chan string)
+	go func() {
+		for {
+			r, err := buff.ReadString('\n')
 			if err == io.EOF {
 				break
 			}
-			log.Panicln(err)
+			if err != nil {
+				log.Panicln(err)
+			}
+			s := strings.TrimSpace(string(r))
+			s = strings.TrimSpace(s)
+			lineChan <- s
 		}
-		s := strings.TrimSpace(r)
-		if s == "tree with node labels for Rod Page's TreeView" {
-			ReadCurrentTree(c.TreeFile, buff)
-		} else if s == "List of extant and reconstructed sequences" {
-			WriteReconstructedAlignment(c.SeqFile ,buff)
+		close(lineChan)
+	}()
+	var tree string
+	var RA bool
+	for s := range lineChan {
+		if s != "" {
+			if strings.HasPrefix(s,"tree with node labels") {
+				treeFileName := strings.Replace(c.TreeFile, "_tree", "_reconstructed_tree", -1)
+				f, err := os.Create(treeFileName)
+				if err != nil {
+					log.Panicln(err)
+				}
+				writer := bufio.NewWriter(f)
+				tree = ReadNextLine(lineChan)
+				writer.WriteString(tree+"\n")
+				writer.Flush()
+				f.Close()
+				log.Printf("Wrote Reconstructed Tree %v", treeFileName)
 
-		} else if strings.HasPrefix(s, "Branch") {
-			var branch Branch
-			result := branchRegex.FindAllStringSubmatch(s, 2)
-			branch.Origin = result[0][1]
-			branch.Target = result[0][2]
-			ReadBranch(buff, &branch, writer)
-			branches = append(branches, branch)
+			} else if strings.HasPrefix(s, "List of extant and reconstructed sequences") {
+				log.Printf("Getting Reconstructed Alignment %v", c.SeqFile)
+				RA = true
+				WriteReconstructedAlignment(c.SeqFile ,lineChan)
+
+			} else if strings.HasPrefix(s, "Branch") {
+				var branch Branch
+				result := branchRegex.FindAllStringSubmatch(s, 2)
+				branch.Origin = result[0][1]
+				branch.Target = result[0][2]
+				ReadBranch(lineChan, &branch, writer)
+				branches = append(branches, branch)
+			}
 		}
 	}
+
 	writer.Flush()
 	f.Close()
 	bf.Close()
+	if tree == "" || RA != true {
+		c.ReadSupplemental(path)
+	}
+
 	return branches
 }
 
-func ReadCurrentTree(filename string, buff *bufio.Reader){
-	f, err := os.Create(strings.Replace(filename, "_tree", "_reconstructed_tree", -1))
-	if err != nil {
-		log.Panicln(err)
+func ReadNextLine(lineChan chan string) string {
+	for s := range lineChan {
+		return s
+		break
 	}
-	defer f.Close()
-	writer := bufio.NewWriter(f)
-	for {
-		r, err := buff.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				writer.Flush()
-				break
-			}
-			log.Panicln(err)
-		}
-		s := strings.TrimSpace(r)
-		if s != "" {
-			writer.WriteString(s)
-			writer.Flush()
-			break
-		}
-	}
+	return ""
 
 }
 
-func WriteReconstructedAlignment(filename string, buff *bufio.Reader) {
+func WriteReconstructedAlignment(filename string, lineChan chan string) {
 	af, err := os.Create(strings.Replace(filename, ".phy", ".reconstructed.phy", -1))
 	if err != nil {
 		log.Panicln(err)
@@ -224,16 +236,7 @@ func WriteReconstructedAlignment(filename string, buff *bufio.Reader) {
 	writer := bufio.NewWriter(af)
 	alignmentStarted := false
 	started := false
-	for {
-		r, err := buff.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			log.Panicln(err)
-		}
-		s := strings.TrimSpace(r)
-
+	for s := range lineChan {
 		if s != ""  {
 			if started && !alignmentStarted {
 				writer.WriteString(" "+s+"\n")
@@ -258,21 +261,12 @@ func WriteReconstructedAlignment(filename string, buff *bufio.Reader) {
 	log.Printf("Wrote Reconstructed Alignment for %v", filename)
 }
 
-func ReadBranch(buff *bufio.Reader, branch *Branch, writer *bufio.Writer) {
+func ReadBranch(lineChan chan string, branch *Branch, writer *bufio.Writer) {
 	enterBranch := false
 	emptyLine := 0
-	for {
-		r, err := buff.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			log.Panicln(err)
-		}
-		s := strings.TrimSpace(r)
+	for s := range lineChan {
 		if s != "" {
 			enterBranch = true
-
 			changes := changeRegex.FindAllStringSubmatch(s, -1)
 			if changes != nil {
 				writer.WriteString(fmt.Sprintf("%v\t%v\t%v\t%v\t%v\t%v\n", branch.Origin, branch.Target, changes[0][1], changes[0][2], changes[0][3], changes[0][4]))
