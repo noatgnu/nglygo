@@ -72,7 +72,12 @@ func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 	queryFastaFile := `D:\GoProject\ancestral\uniprot-homosapiens.fasta`
 	outputBlast := `D:\GoProject\ancestral\homosapiens1.fasta.blast.tsv`
 	blastDB := `C:\Users\localadmin\GoglandProjects\ancestral\nr_customDB`
-
+	/*speciesFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.species.txt`
+	outputFolder := `D:\GoProject\ancestral\result\test15`
+	queryInfoFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.query`
+	queryFastaFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.fasta`
+	outputBlast := `D:\GoProject\ancestral\germin.fasta.blast.tsv`
+	blastDB := `D:\GoProject\ancestral\germin_customDB`*/
 /*	speciesFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\neuraminidase.sepecies.txt`
 	outputFolder := `D:\GoProject\ancestral\result\test7`
 	queryInfoFile := `C:\Users\localadmin\Downloads\uniprot-yourlist_M20180208A7434721E10EE6586998A056CCD0537E395F70S.tab`
@@ -146,12 +151,12 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 
 func MakeBlastDBHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		f := `C:\Users\localadmin\PycharmProjects\ancestralplay\neuraminidase.fasta`
-		fo := `C:\Users\localadmin\PycharmProjects\ancestralplay\neuraminidase.fasta_filtered`
-		s := `C:\Users\localadmin\PycharmProjects\ancestralplay\neuraminidase.sepecies.txt`
+		f := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.fasta`
+		fo := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.fasta_filtered`
+		s := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.species.txt`
 		workflow.PreProcessDB(f, fo, s)
 		log.Println(f, fo, s)
-		o := `D:\GoProject\ancestral\neuraminidase_customDB`
+		o := `D:\GoProject\ancestral\germin_customDB`
 		workflow.CreateCustomDB(fo, o)
 	}
 }

@@ -88,33 +88,36 @@ func LoadQueryTab(filename string) map[string]blastwrapper.PrimeSeq {
 			s.Seq = strings.TrimSpace(r[columns["Sequence"]])
 			s.Species = r[columns["Organism"]]
 			s.Name = r[columns["Entry name"]]
-			length, err := strconv.Atoi(r[columns["Length"]])
+			/*length, err := strconv.Atoi(r[columns["Length"]])
 			if err != nil {
 				log.Panicln(err)
-			}
-			s.Length =  length
+			}*/
+			s.Length = len(s.Seq)
 			var topDomain []blastwrapper.TopDom
-			for _, v := range strings.SplitN(r[columns["Topological domain"]], ";", -1) {
-				v = strings.TrimSpace(v)
-				if strings.HasPrefix(v, "TOPO_DOM") {
-					regres := regexDomain.FindAllStringSubmatch(v, -1)
-					if regres != nil {
-						result := regres[0]
-						if len(result) == 4 {
-							start, err := strconv.Atoi(result[1])
-							if err != nil {
-								log.Panicln(err)
+			if len(r[columns["Topological domain"]])>0 {
+				for _, v := range strings.SplitN(r[columns["Topological domain"]], ";", -1) {
+					v = strings.TrimSpace(v)
+					if strings.HasPrefix(v, "TOPO_DOM") {
+						regres := regexDomain.FindAllStringSubmatch(v, -1)
+						if regres != nil {
+							result := regres[0]
+							if len(result) == 4 {
+								start, err := strconv.Atoi(result[1])
+								if err != nil {
+									log.Panicln(err)
+								}
+								end, err := strconv.Atoi(result[2])
+								if err != nil {
+									log.Panicln(err)
+								}
+								td := blastwrapper.TopDom{Start: start, Stop: end, Type: result[3]}
+								topDomain = append(topDomain, td)
 							}
-							end, err := strconv.Atoi(result[2])
-							if err != nil {
-								log.Panicln(err)
-							}
-							td := blastwrapper.TopDom{Start: start, Stop: end, Type: result[3]}
-							topDomain = append(topDomain, td)
 						}
 					}
 				}
 			}
+
 			s.TopDomain = topDomain
 			qc := blastwrapper.SeqQualityControl(s, true)
 			if qc == true {
