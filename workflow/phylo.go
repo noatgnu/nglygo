@@ -155,6 +155,12 @@ func CreateAlignment(in string, out string) {
 
 }
 
+// Wrapper function for reading of Phylip alignment file format and mapping of topological domain from query sequence
+// to the rest of the alignment. Each sequence within the alignment is parsed for any N-glycosylation motif in both gap
+// and ungapped forms and mapped to their topological domains.
+// Return a motif map with the key being the sequence id and the values are an array of N-glycosylation
+// motif start and stop positions without gaps; a similar copy but with gaps; an Alignment object;
+// a map of N-glycosylation motif start position to the motif itself.
 func ReadAlignmentPhylip(filename string, b BlastMap) (map[string][][]int, map[string][][]int, alignio.Alignment, map[string]map[int][]int) {
 	a := alignio.ReadPhylip(filename)
 	f, err := os.Create(strings.Replace(filename, ".phy", ".motifs.txt", -1))
@@ -193,7 +199,15 @@ func ReadAlignmentPhylip(filename string, b BlastMap) (map[string][][]int, map[s
 					}
 				}
 			}
-			writer.WriteString(fmt.Sprintf("%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", k, noGap[i][0]+1, noGap[i][1], noGapSeq[noGap[i][0]:noGap[i][1]], gap[i][0]+1, gap[i][1], v[gap[i][0]:gap[i][1]], topdomType))
+			writer.WriteString(fmt.Sprintf("%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+				k,
+				noGap[i][0]+1,
+				noGap[i][1],
+				noGapSeq[noGap[i][0]:noGap[i][1]],
+				gap[i][0]+1,
+				gap[i][1],
+				v[gap[i][0]:gap[i][1]],
+				topdomType))
 		}
 	}
 	writer.Flush()
@@ -234,6 +248,8 @@ func CreateTreeML(in string, bootstrap int, speed string) {
 	}
 }
 
+// Wrapper function for performing Ancestral sequence reconstruction with CodeML. Following by parsing supplementary
+// result for phylogenetic tree and branches information.
 func ASR(seq string, tree string, out string, bm BlastMap) {
 	a := codemlwrapper.CodeMLCommandline{}
 	a.Command = `D:\paml4.9e\bin\codeml.exe`
@@ -244,7 +260,7 @@ func ASR(seq string, tree string, out string, bm BlastMap) {
 	a.Verbose = 2
 	a.Runmode = 0
 	a.SeqType = 2
-	a.Clock = 0
+	a.Clock = 1
 	a.AADist = 0
 	a.AARateFile = `D:\paml4.9e\dat\wag.dat`
 	a.Model = 2
@@ -272,6 +288,7 @@ func ASR(seq string, tree string, out string, bm BlastMap) {
 	CombineTree(a)
 }
 
+// Read Motif Analysis file and return an array of BranchMotif Objects.
 func ReadMotifAnalysis(filename string) (ArrayMotifA []BranchMotif) {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -296,6 +313,10 @@ func ReadMotifAnalysis(filename string) (ArrayMotifA []BranchMotif) {
 	return ArrayMotifA
 }
 
+// Traversing branches and get their motif as well as the aligned site and assigning their statuses. Create the
+// motif.analysis.txt file for storing of the function result. If the aligned site and origin site are both
+// N-glycosylation motifs, the transition is considered conserved. If the aligned site has motif but origin site does not
+// the transition is considered as gained. If the opposite, the transition is considered as loss.
 func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int, bm BlastMap) {
 	_, alignedMotif, alignment, nMap := ReadAlignmentPhylip(strings.Replace(filename, ".phy", ".reconstructed.phy", -1), bm)
 	f, err := os.Create(strings.Replace(filename, ".phy", ".motif.analysis.txt", -1))
@@ -304,7 +325,7 @@ func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int, bm B
 	}
 	defer f.Close()
 	writer := bufio.NewWriter(f)
-	writer.WriteString("Origin\tTarget\tPosition_Source\tOrigin_Aligned_Start\tOrigin_Aligned_End\tOrigin_Seq\tTarget_Aligned_Start\tTarget_Aligned_End\tTarget_Seq\tExpanded_Origin_Start\tExpanded_Origin_End\tExpanded_Origin_Seq\tExpanded_Target_Start\tExpanded_Target_End\tExpanded_Target_seq\tMotif_Status\n")
+	writer.WriteString("Origin\tTarget\tPosition_Source\tOrigin_Aligned_Start\tOrigin_Aligned_End\tOrigin_Seq\tTarget_Aligned_Start\tTarget_Aligned_End\tTarget_Seq\tExpanded_Origin_Start\tExpanded_Origin_End\tExpanded_Origin_Seq\tExpanded_Target_Start\tExpanded_Target_End\tExpanded_Target_Seq\tMotif_Status\n")
 
 	for _, b := range branches {
 		conservedChecked := make(map[int]bool)
@@ -314,7 +335,13 @@ func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int, bm B
 					if m, ok := nMap[b.Target]; ok {
 						if n, ok := m[e[0]]; ok {
 							conservedChecked[e[0]] = true
-							startOrigin, endOrigin := ExpandSequence(10,10, alignment.Alignment[b.Origin], e[0], e[0]+1, "-")
+							startOrigin, endOrigin := ExpandSequence(
+								10,
+								10,
+								alignment.Alignment[b.Origin],
+								e[0],
+								e[0]+1,
+								"-")
 							startTarget, endTarget := ExpandSequence(10,10, alignment.Alignment[b.Target], e[0], e[0]+1, "-")
 
 							writer.WriteString(b.Origin+"\t"+b.Target+"\t"+b.Origin+"\t"+strconv.Itoa(e[0]+1)+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Origin][n[0]:n[1]]+"\t"+strconv.Itoa(e[0]+1)+"\t"+strconv.Itoa(e[1])+"\t"+alignment.Alignment[b.Target][n[0]:n[1]]+"\t"+strconv.Itoa(startOrigin+1)+"\t"+strconv.Itoa(endOrigin)+"\t"+alignment.Alignment[b.Origin][startOrigin:endOrigin]+"\t"+strconv.Itoa(startTarget+1)+"\t"+strconv.Itoa(endTarget)+"\t"+alignment.Alignment[b.Target][startTarget:endTarget]+"\t"+"conserved\n")
@@ -419,12 +446,23 @@ func CombineTree(a codemlwrapper.CodeMLCommandline) {
 	}
 }
 
-func ProcessAlignment(b BlastMap, asr bool) {
+func ProcessAlignment(b BlastMap, asr bool, defaultTree string) {
 	log.Printf("Started: Phylogeny Construction (%v)", b.FileName)
 	alignmentFile := strings.Replace(b.FileName, ".filtered.fasta", ".phy", -1)
 	CreateAlignment(b.FileName, alignmentFile)
 	if asr == true {
-		CreateTreeML(alignmentFile, 1000, "fast")
+		if defaultTree == `` {
+			CreateTreeML(alignmentFile, 1000, "fast")
+		} else {
+			var organism []string
+			var replaceDict []string
+			for i, v := range b.OrganismMap {
+				organism = append(organism, v)
+				replaceDict = append(replaceDict, v + ":" + i)
+			}
+			PruningTree(defaultTree, alignmentFile+"_phyml_tree.txt", organism, replaceDict)
+		}
+
 		ReformatBootstrappedTree(alignmentFile)
 
 		ASR(alignmentFile, alignmentFile+"_phyml_tree_reformated.txt", strings.Replace(alignmentFile, ".phy", ".asr", -1), b)
@@ -449,7 +487,7 @@ func ReformatBootstrappedTree(alignmentFile string) {
 
 	line := strings.TrimSpace(r[:])
 	log.Printf("Reformatting Bootstrapped Tree %v", line)
-	matches := treeRegex.FindAllStringSubmatchIndex(line, -1)
+	/*matches := treeRegex.FindAllStringSubmatchIndex(line, -1)
 	replaced := make(map[string]bool)
 	if len(matches) > 0 {
 		for _, m := range matches {
@@ -461,13 +499,14 @@ func ReformatBootstrappedTree(alignmentFile string) {
 	}
 	for k := range replaced {
 		line = strings.Replace(line, k, "):", -1)
-	}
+	}*/
 	writer.WriteString(line + "\n")
 	writer.Flush()
 	f.Close()
 	w.Close()
 }
 
+// Function to obtain a substring window with the designated position at the center.
 func ExpandSequence(numberForward int, numberBackward int, sequence string, start int, end int, ignoreCharacter string) (startPosition int, endPosition int) {
 	forwardOffset := 0
 	backwardOffset := 0
@@ -572,4 +611,19 @@ func RemapTopDom(seqWithGap string, topDom []blastwrapper.TopDom, filename strin
 	defer o.Close()
 
 	return reMapped
+}
+
+func PruningTree(in string, outfileName string, organism []string, replaceDict []string) {
+	p := pythoncmdwrapper.PruneTreeCommandline{}
+	p.Command = `C:\Program Files\Anaconda3\python.exe`
+	p.Out = outfileName
+	p.Organism = strings.Join(organism, ";")
+	p.Replace = strings.Join(replaceDict, ";")
+	p.Program = `D:\GoProject\ancestral\src\github.com\noatgnu\ancestral\prunetree.py`
+	p.CurrentTree = in
+	log.Println(p.Out)
+	err := p.Execute()
+	if err != nil {
+		log.Panicln(err)
+	}
 }

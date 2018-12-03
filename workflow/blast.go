@@ -57,6 +57,8 @@ func (cbm *ConcurrentBlastMap) Append(bm BlastMap) {
 var fmt6Column = []string{"qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"}
 var TabQueryColumns = []string{"Entry", "Entry name", "Protein names", "Gene names", "Organism", "Length", "Topological domain", "Sequence"}
 
+// Load tabulated query input file from Uniprot. Return a map of sequence ids to a blastwrapper.PrimeSeq containing the
+// information for each sequence
 func LoadQueryTab(filename string) map[string]blastwrapper.PrimeSeq {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -179,6 +181,7 @@ func LoadQuery(filename string) map[string]int {
 	return m
 }
 
+// Wrapper for Operating Local Blastp and with blast output format 6, using 7 thread and evalue cut off 0.001.
 func BlastOffline(filename string, out string, dbname string, targetNum int) {
 	b := blastwrapper.NcbiBlastpCommandline{}
 	b.Command = `C:\Program Files\NCBI\blast-2.7.1+\bin\blastp.exe`
@@ -196,6 +199,7 @@ func BlastOffline(filename string, out string, dbname string, targetNum int) {
 	log.Println("Finished.")
 }
 
+// Write out sequence ids for each matches to a particular blast query.
 func CreateMatchesFile(filename string, fmt6q fmt6Query) error {
 	f, err := os.Create(filename)
 	if err != nil {
@@ -224,6 +228,7 @@ func CreateBlastDBCMDFile(filename string, c chan fmt6Query) {
 
 }
 
+// Wrapper for getting sequences from blastdb from sequence ids using blastdbcmd
 func QCFmt6Query(filename string, db string, outFilename string) {
 	bc := blastwrapper.BlastDBCMDCommandline{}
 	bc.Command = `C:\Program Files\NCBI\blast-2.7.1+\bin\blastdbcmd.exe`
@@ -237,6 +242,7 @@ func QCFmt6Query(filename string, db string, outFilename string) {
 	}
 }
 
+// Blast tabulated OutFmt6 parser. Return a ConcurrentBlastMap object containing quality control filtered blast result.
 func BlastFmt6Parser(filename string, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq, workPool int) ConcurrentBlastMap {
 	log.Printf("Processing Blast FMT6 File %v", filename)
 	fmt6Chan := make(chan fmt6Query)
@@ -305,10 +311,7 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 	return bm
 }
 
-func Process(fmt6 fmt6Query, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq, bm ConcurrentBlastMap, sem chan bool, wg sync.WaitGroup) {
-
-}
-
+// Create fasta file containing sequence with the matched id and filter blast matches sequence id for the correct organism.
 func ProcessFMT6Query(fmt6 fmt6Query, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq, bm *ConcurrentBlastMap) {
 	log.Printf("Processing %v", fmt6.Query)
 	folderName := strings.Replace(fmt6.Query, "|", "_", -1)
@@ -332,6 +335,8 @@ func ProcessFMT6Query(fmt6 fmt6Query, outDirectory string, db string, organisms 
 	}
 }
 
+// Filtered match ids for only organism of interests and given a numerical id as a workaround for
+// phylip file format limitation.
 func FilterMatchFile(organisms []string, query BlastDBCMDResult) (BlastMap, error) {
 	outFile := strings.Replace(query.Filename, ".fasta", ".filtered.fasta", -1)
 	matchFile, err := os.Open(query.Filename)
@@ -390,6 +395,7 @@ func FilterMatchFile(organisms []string, query BlastDBCMDResult) (BlastMap, erro
 
 }
 
+// Writeout to fasta file.
 func writeOut(count int, result BlastMap, p FilterResult, b *bufio.Writer) {
 	numb := strconv.Itoa(count)
 	result.OrganismMap[numb] = p.Organism
@@ -403,6 +409,9 @@ func writeOut(count int, result BlastMap, p FilterResult, b *bufio.Writer) {
 	}*/
 	b.WriteString(p.Seq.ToString())
 }
+
+// Check if sequence length is within 20% boundaries and identify their organism for elimination from the list for this
+// query. Qualified outputs are sent through a channel for further processing.
 func ProcessOrganisms(buff *bufio.Reader, s blastwrapper.PrimeSeq, organisms []string, queryLength int, c chan FilterResult, collect map[string]bool) {
 	bound := queryLength*20/100
 	for {

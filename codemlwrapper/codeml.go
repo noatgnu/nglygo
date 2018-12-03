@@ -13,6 +13,7 @@ import (
 	"io"
 	"strings"
 	"regexp"
+	"time"
 )
 
 type Branch struct{
@@ -143,6 +144,9 @@ func (c *CodeMLCommandline) BuildCtl(fileName string) (err error) {
 	return err
 }
 
+// Reading supplementary result from CodeML ancestral sequence reconstruction operation. Parse out tree and branches mutation
+// information. Create a _branch file to store the result. If no reconstructed tree could be found, the process will pause
+// for 2 seconds and the file would be re read. Return all collected branches from the reconstructed information.
 func (c *CodeMLCommandline) ReadSupplemental(path string) (branches []Branch) {
 
 	f, err := os.Open(path)
@@ -212,6 +216,7 @@ func (c *CodeMLCommandline) ReadSupplemental(path string) (branches []Branch) {
 	f.Close()
 	bf.Close()
 	if tree == "" || RA != true {
+		time.Sleep(2)
 		c.ReadSupplemental(path)
 	}
 
@@ -227,6 +232,7 @@ func ReadNextLine(lineChan chan string) string {
 
 }
 
+// Write out reconstructed alignment from supplementary file.
 func WriteReconstructedAlignment(filename string, lineChan chan string) {
 	af, err := os.Create(strings.Replace(filename, ".phy", ".reconstructed.phy", -1))
 	if err != nil {
@@ -261,6 +267,7 @@ func WriteReconstructedAlignment(filename string, lineChan chan string) {
 	log.Printf("Wrote Reconstructed Alignment for %v", filename)
 }
 
+// Read string from channel and identify branches information and write out to output writer.
 func ReadBranch(lineChan chan string, branch *Branch, writer *bufio.Writer) {
 	enterBranch := false
 	emptyLine := 0

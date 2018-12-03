@@ -67,11 +67,22 @@ func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 	workPool := 6
 
 	speciesFile := `C:\Users\localadmin\GoglandProjects\ancestral\species.txt`
-	outputFolder := `D:\GoProject\ancestral\result\test14`
+	outputFolder := `D:\GoProject\ancestral\result\test18`
 	queryInfoFile := `C:\Users\localadmin\GoglandProjects\ancestral\uniprot-glycoprotein.tab`
 	queryFastaFile := `D:\GoProject\ancestral\uniprot-homosapiens.fasta`
 	outputBlast := `D:\GoProject\ancestral\homosapiens1.fasta.blast.tsv`
 	blastDB := `C:\Users\localadmin\GoglandProjects\ancestral\nr_customDB`
+	defaultTree := `C:\Users\localadmin\Downloads\species.nonodename.nwk.txt`
+	f, err := os.Open(defaultTree)
+	if err != nil {
+		log.Panicln(err)
+	}
+	reader := bufio.NewReader(f)
+	defaultTree, err = reader.ReadString('\n')
+	if err != nil {
+		log.Panicln(err)
+	}
+	f.Close()
 	/*speciesFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.species.txt`
 	outputFolder := `D:\GoProject\ancestral\result\test15`
 	queryInfoFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.query`
@@ -134,7 +145,7 @@ func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 		count ++
 		log.Println(count)
 		go func() {
-			workflow.ProcessAlignment(v, asr)
+			workflow.ProcessAlignment(v, asr, defaultTree)
 			defer func() {
 				<- sem
 			}()
@@ -162,7 +173,8 @@ func MakeBlastDBHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func BlastPHandler(w http.ResponseWriter, r *http.Request){
-	f, err := os.Open(`D:\python_projects\datahelper\ancestral_wf\uniprot-glycoprotein.tab`)
+	// f, err := os.Open(`D:\python_projects\datahelper\ancestral_wf\uniprot-glycoprotein.tab`)
+	f, err := os.Open(`D:\GoProject\ancestral\uniprot-glycoproteinhs.tab`)
 	if err != nil {
 		log.Panicln(err)
 	}
@@ -202,7 +214,7 @@ func BlastPHandler(w http.ResponseWriter, r *http.Request){
 		defer close(q)
 	}()
 
-	o, err := os.Create(`D:\GoProject\ancestral\uniprot-homosapiens.fasta`)
+	o, err := os.Create(`D:\GoProject\ancestral\uniprot-homosapienshs.fasta`)
 	if err != nil {
 		log.Panicln(err)
 	}
@@ -218,9 +230,9 @@ func BlastPHandler(w http.ResponseWriter, r *http.Request){
 	writer.Flush()
 	o.Close()
 
-	if r.Method == "GET" {
+	/*if r.Method == "GET" {
 		workflow.BlastOffline(`C:\Users\localadmin\PycharmProjects\ancestralplay\hema.fasta`, `C:\Users\localadmin\PycharmProjects\ancestralplay\hema.fasta.blast.tsv`, `D:\GoProject\ancestral\hemagglutinin_customDB`, 500)
-	}
+	}*/
 }
 
 func GetDBListHandler(w http.ResponseWriter, r *http.Request) {

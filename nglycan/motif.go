@@ -12,6 +12,8 @@ var (
 	tsRe       = regexp.MustCompile(tsRegex)
 )
 
+// Check if a series of N and T/S position motifs do not contain P.
+// Return a blank int array if no legal motifs were found.
 func CheckMotif(seq string, v []int, ts [][]int) (result []int) {
 	if seq[v[1]:v[1]+1] != "P" {
 		for _, v1 := range ts {
@@ -23,6 +25,9 @@ func CheckMotif(seq string, v []int, ts [][]int) (result []int) {
 	return result
 }
 
+// Parse N-glycosylation motif that may contain gaps within a string.
+// Start by identification of all N and T/S positions. Then checking if they don't contain Proline.
+// Return an [][]int containing the start and stop positions of each N-glycosylation motif.
 func MotifParseStringWithGap(c string, number int) (result [][]int) {
 	n := nRe.FindAllStringIndex(c, -1)
 	ts := tsRe.FindAllStringIndex(c, -1)
