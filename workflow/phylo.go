@@ -580,6 +580,10 @@ func RemapTopDom(seqWithGap string, topDom []blastwrapper.TopDom, filename strin
 					}
 				}
 				if (startCheck == true) && (endCheck == true) {
+					if td.Stop != len(seqWithGap) {
+						log.Print("Gapped N-terminal")
+						td.Stop = len(seqWithGap)
+					}
 					break
 				}
 			}
@@ -592,6 +596,10 @@ func RemapTopDom(seqWithGap string, topDom []blastwrapper.TopDom, filename strin
 					if endCheck == false {
 						if (v[0] <= (t.Stop+gap)) && (v[1] >= (t.Stop+gap)) {
 							td.Stop = t.Stop+gap
+							if td.Stop != len(seqWithGap) {
+								log.Print("Gapped N-terminal")
+								td.Stop = len(seqWithGap)
+							}
 							endCheck = true
 							break
 						}

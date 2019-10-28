@@ -187,7 +187,7 @@ func BlastOffline(filename string, out string, dbname string, targetNum int) {
 	b.Command = `C:\Program Files\NCBI\blast-2.7.1+\bin\blastp.exe`
 	b.DB = dbname
 	b.Out = out
-	b.OutFmt = "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore"
+	b.OutFmt = "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qcovs qcovhsp qcovus"
 	b.NumThreads = 7
 	b.EValue = 0.001
 	b.Query = filename
@@ -257,6 +257,7 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 	c.Comma = '\t'
 	go func() {
 		var fmt6q fmt6Query
+		qMap := make(map[string]bool)
 		for {
 			r, err := c.Read()
 			if err == io.EOF {
@@ -274,13 +275,17 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 				if fmt6q.Query != "" {
 					fmt6Chan <- fmt6Query{fmt6q.Query, fmt6q.Matches[:]}
 				}
-
+				qMap = make(map[string]bool)
 				fmt6q.Query = r[0]
 				fmt6q.Matches = []string{}
 			}
 			pi, err := strconv.ParseFloat(r[2], 32)
-			if pi > 60 {
-				fmt6q.Matches = append(fmt6q.Matches, r[1])
+			qcovs, err := strconv.ParseFloat(r[12], 32)
+			if pi > 60 && qcovs >= 80 {
+				if _, ok := qMap[r[1]]; !ok {
+					qMap[r[1]] = true
+					fmt6q.Matches = append(fmt6q.Matches, r[1])
+				}
 			}
 			//fmt6q.Matches = append(fmt6q.Matches, r[1])
 		}
@@ -410,10 +415,10 @@ func writeOut(count int, result BlastMap, p FilterResult, b *bufio.Writer) {
 	b.WriteString(p.Seq.ToString())
 }
 
-// Check if sequence length is within 20% boundaries and identify their organism for elimination from the list for this
+// Check if sequence length is within 10% boundaries and identify their organism for elimination from the list for this
 // query. Qualified outputs are sent through a channel for further processing.
 func ProcessOrganisms(buff *bufio.Reader, s blastwrapper.PrimeSeq, organisms []string, queryLength int, c chan FilterResult, collect map[string]bool) {
-	bound := queryLength*20/100
+	bound := queryLength*10/100
 	for {
 		r, err := buff.ReadString('\n')
 
