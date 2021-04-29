@@ -2,13 +2,14 @@ package blastwrapper
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 )
 
 //const OrganismRegexPat = `\[([\w\s\(\)/]+)\]`
 const OrganismRegexPat = `\[([^\]]+)\]`
-const Species = `[\w|\s]+`
+const Species = `[\w|\s|\.]+`
 var OrgRegex = regexp.MustCompile(OrganismRegexPat)
 var SpeciesRegex = regexp.MustCompile(Species)
 
@@ -60,18 +61,31 @@ func SeqQualityControl(seq PrimeSeq, partialCheck bool) (quality bool) {
 func SeqFilterOrganism(seq PrimeSeq, organisms []string, removeFound bool, collect map[string]bool) (check bool, organismLeft []string, found string) {
 	org := ""
 	if seq.Species != "" {
-		org = SpeciesRegex.FindString(seq.Species)
-		org = strings.TrimSpace(org)
+		//log.Println(seq.Species)
+		//org = SpeciesRegex.FindString(seq.Species)
+		//org = strings.TrimSpace(org)
+		org = strings.TrimSpace(seq.Species)
+		log.Println(org)
 	} else {
 		org = OrgRegex.FindString(seq.Id)
+		log.Println(org)
 	}
-
-	//log.Println(seq.Id)
-	//log.Println(org)
+	org = strings.TrimLeft(org, "[")
+	org = strings.TrimRight(org, "]")
+	log.Println(seq)
+	log.Println(org)
+	log.Printf("Filtering %v", organisms)
 	if org != "" {
+
 		if _, ok := collect[seq.Seq]; !ok {
+			log.Println(collect)
+			log.Println(seq.Seq)
+			log.Printf("Filtering %v", organisms)
 			for _, v := range organisms {
+				log.Println("origin" + org)
+				log.Println(v)
 				if strings.Contains(strings.ToLower(org), strings.ToLower(v)) {
+					log.Println(org)
 					if removeFound {
 						var arr []string
 						for _, a := range organisms{
@@ -80,14 +94,18 @@ func SeqFilterOrganism(seq PrimeSeq, organisms []string, removeFound bool, colle
 							}
 						}
 						collect[seq.Seq] = true
+						log.Printf("Removed %v from the list", org)
 						return true, arr, v
 					}
 					collect[seq.Seq] = true
 					return true, organisms, v
 				}
 			}
+		} else {
+			log.Println("Seq already exist")
 		}
-
+	} else {
+		log.Println(org)
 	}
 	return false, nil, ""
 }

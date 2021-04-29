@@ -13,11 +13,14 @@ func FilterBlastDBByOrganisms(f *os.File, organisms []string, c chan blastwrappe
 
 	buff := bufio.NewReader(f)
 	s := blastwrapper.PrimeSeq{}
+	count := 0
 	for {
 		s1, err := buff.ReadString('\n')
 		if err == io.EOF {
 			if s.Id != "" {
 				if blastwrapper.SeqFilterOrganismNoRegex(s, organisms) {
+					count ++
+					log.Println(count)
 					c <- s
 				}
 			}
@@ -31,6 +34,8 @@ func FilterBlastDBByOrganisms(f *os.File, organisms []string, c chan blastwrappe
 
 			if s.Id != "" {
 				if blastwrapper.SeqFilterOrganismNoRegex(s, organisms) {
+					count ++
+					log.Println(count)
 					c <- s
 				}
 			}
@@ -64,10 +69,11 @@ func FilterBlastDB(filename string, organisms []string, output string) {
 
 	for s := range c {
 		writer.WriteString(s.ToString())
+		log.Println(s.ToString())
 	}
 
 	log.Println("Completed blast DB Filtering")
-	defer writer.Flush()
+	writer.Flush()
 	defer outfile.Close()
 	defer f.Close()
 }

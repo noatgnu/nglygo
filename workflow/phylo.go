@@ -1,25 +1,26 @@
 package workflow
 
 import (
-	"github.com/noatgnu/ancestral/clustalowrapper"
-	"log"
-	"github.com/noatgnu/ancestral/phymlwrapper"
-	"strings"
-	"github.com/noatgnu/ancestral/codemlwrapper"
-	"github.com/noatgnu/ancestral/pythoncmdwrapper"
-	"github.com/noatgnu/ancestral/alignio"
-	"github.com/noatgnu/ancestral/nglycan"
-	"os"
 	"bufio"
-	"fmt"
-	"strconv"
-	"regexp"
 	"encoding/csv"
-	"io"
+	"fmt"
+	"github.com/noatgnu/ancestral/alignio"
 	"github.com/noatgnu/ancestral/blastwrapper"
+	"github.com/noatgnu/ancestral/codemlwrapper"
+	"github.com/noatgnu/ancestral/configuration"
 	"github.com/noatgnu/ancestral/fasttreecmdwrapper"
+	"github.com/noatgnu/ancestral/musclewrapper"
+	"github.com/noatgnu/ancestral/nglycan"
+	"github.com/noatgnu/ancestral/phymlwrapper"
+	"github.com/noatgnu/ancestral/pythoncmdwrapper"
 	"github.com/noatgnu/ancestral/raxmlwrapper"
+	"io"
+	"log"
+	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 )
 
 const nRegexPat = `N`
@@ -134,15 +135,17 @@ func ConserveCount(inchan chan map[string]string) map[int]int {
 
 
 func CreateAlignment(in string, out string) {
-	c := clustalowrapper.ClustalOCommandline{}
-	c.Command = `D:\clustal-omega-1.2.2-win64\clustalo.exe`
+	//c := clustalowrapper.ClustalOCommandline{}
+	//c.Command = `D:\clustal-omega-1.2.2-win64\clustalo.exe`
+	c := musclewrapper.MuscleCommandline{}
+	c.Command = `D:\muscle3.8.31_i86win32.exe`
 	c.In = in
 
 	if strings.HasSuffix(out, "phy"){
-		c.OutFmt = "--outfmt=phylip"
+		//c.OutFmt = "--outfmt=phylip"
 		c.Out = out+"_inter"
 	} else {
-		c.OutFmt = "--outfmt=fasta"
+		//c.OutFmt = "--outfmt=fasta"
 		c.Out = out
 	}
 	err := c.Execute()
@@ -214,13 +217,14 @@ func ReadAlignmentPhylip(filename string, b BlastMap) (map[string][][]int, map[s
 	return motifMap, alignedMotifMap, a, nResidueAlignedMotifMap
 }
 
-func CreateTreeML(in string, bootstrap int, speed string) {
+func CreateTreeML(in string, bootstrap int, speed string, programPathFastree string, programPathPhyML string) {
 	switch speed {
 	case "fast":
 		c := fasttreecmdwrapper.FastMLCommandline{}
-		c.Command = `D:\GoProject\ancestral\FastTree.exe`
+		c.Command = programPathFastree
 		c.In = in+".fasta"
 		c.Out = in+"_phyml_tree.txt"
+		c.Bootstrap = bootstrap
 		log.Println(c.Out)
 		err := c.Execute()
 		if err != nil {
@@ -228,7 +232,7 @@ func CreateTreeML(in string, bootstrap int, speed string) {
 		}
 	case "moderate":
 		c := raxmlwrapper.RaxMLCommandline{}
-		c.Command = `D:\GoProject\ancestral\FastTree.exe`
+		c.Command = programPathFastree
 		c.In = in
 		c.Out = in+"_phyml_tree.txt"
 		log.Println(c.Out)
@@ -238,7 +242,7 @@ func CreateTreeML(in string, bootstrap int, speed string) {
 		}
 	case "slow":
 		c := phymlwrapper.PhyMLCommandline{}
-		c.Command = `D:\PhyML-3.1\PhyML-3.1_win32.exe`
+		c.Command = programPathPhyML
 		c.In = in
 		c.Bootstrap = bootstrap
 		err := c.Execute()
@@ -250,9 +254,9 @@ func CreateTreeML(in string, bootstrap int, speed string) {
 
 // Wrapper function for performing Ancestral sequence reconstruction with CodeML. Following by parsing supplementary
 // result for phylogenetic tree and branches information.
-func ASR(seq string, tree string, out string, bm BlastMap) {
+func ASR(seq string, tree string, out string, bm BlastMap, config configuration.Configuration) {
 	a := codemlwrapper.CodeMLCommandline{}
-	a.Command = `D:\paml4.9e\bin\codeml.exe`
+	a.Command = config.ASRProgramPath
 	a.SeqFile = seq
 	a.TreeFile = tree
 	a.OutFile = out
@@ -262,7 +266,8 @@ func ASR(seq string, tree string, out string, bm BlastMap) {
 	a.SeqType = 2
 	a.Clock = 1
 	a.AADist = 0
-	a.AARateFile = `D:\paml4.9e\dat\wag.dat`
+	a.AARateFile = config.ASRMatrixPath
+	//a.AARateFile = `D:\paml4.9e\dat\dayhoff.dat`
 	a.Model = 2
 	a.ICode = 0
 	a.Mgene = 0
@@ -285,7 +290,7 @@ func ASR(seq string, tree string, out string, bm BlastMap) {
 	dir, _ := filepath.Split(a.SeqFile)
 	branches := a.ReadSupplemental(filepath.Join(dir, "rst"))
 	MotifAnalysis(seq, branches, 0, bm)
-	CombineTree(a)
+	CombineTree(a, config)
 }
 
 // Read Motif Analysis file and return an array of BranchMotif Objects.
@@ -433,10 +438,10 @@ func MotifAnalysis(filename string, branches []codemlwrapper.Branch, d int, bm B
 	writer.Flush()
 }
 
-func CombineTree(a codemlwrapper.CodeMLCommandline) {
+func CombineTree(a codemlwrapper.CodeMLCommandline, config configuration.Configuration) {
 	p := pythoncmdwrapper.ProcessTreeCommandline{}
-	p.Command = `C:\Program Files\Anaconda3\python.exe`
-	p.Program = `D:\GoProject\ancestral\src\github.com\noatgnu\ancestral\processtree.py`
+	p.Command = config.PythonPath
+	p.Program = config.ProcessTreePythonScriptPath
 	p.CurrentTree = a.TreeFile
 	p.Reconstructed = strings.Replace(a.TreeFile, "_tree", "_reconstructed_tree", -1)
 	p.Out = strings.Replace(p.Reconstructed, ".txt", ".reconstructed.tree.txt", -1)
@@ -446,13 +451,13 @@ func CombineTree(a codemlwrapper.CodeMLCommandline) {
 	}
 }
 
-func ProcessAlignment(b BlastMap, asr bool, defaultTree string) {
+func ProcessAlignment(b BlastMap, asr bool, defaultTree string, config configuration.Configuration) {
 	log.Printf("Started: Phylogeny Construction (%v)", b.FileName)
 	alignmentFile := strings.Replace(b.FileName, ".filtered.fasta", ".phy", -1)
 	CreateAlignment(b.FileName, alignmentFile)
 	if asr == true {
 		if defaultTree == `` {
-			CreateTreeML(alignmentFile, 1000, "fast")
+			CreateTreeML(alignmentFile, 1000, config.PhylogeneticTreeConstructionSpeed, config.FastTreePath, config.PhyMLPath)
 		} else {
 			var organism []string
 			var replaceDict []string
@@ -465,7 +470,7 @@ func ProcessAlignment(b BlastMap, asr bool, defaultTree string) {
 
 		ReformatBootstrappedTree(alignmentFile)
 
-		ASR(alignmentFile, alignmentFile+"_phyml_tree_reformated.txt", strings.Replace(alignmentFile, ".phy", ".asr", -1), b)
+		ASR(alignmentFile, alignmentFile+"_phyml_tree_reformated.txt", strings.Replace(alignmentFile, ".phy", ".asr", -1), b, config)
 	} else {
 		ReadAlignmentPhylip(alignmentFile, b)
 	}
@@ -484,10 +489,11 @@ func ReformatBootstrappedTree(alignmentFile string) {
 	}
 	writer := bufio.NewWriter(w)
 	r, _ := reader.ReadString('\n')
-
+	log.Println(r, alignmentFile)
 	line := strings.TrimSpace(r[:])
 	log.Printf("Reformatting Bootstrapped Tree %v", line)
-	/*matches := treeRegex.FindAllStringSubmatchIndex(line, -1)
+	matches := treeRegex.FindAllStringSubmatchIndex(line, -1)
+	log.Println(matches)
 	replaced := make(map[string]bool)
 	if len(matches) > 0 {
 		for _, m := range matches {
@@ -497,9 +503,11 @@ func ReformatBootstrappedTree(alignmentFile string) {
 			}
 		}
 	}
+	log.Println(replaced)
 	for k := range replaced {
 		line = strings.Replace(line, k, "):", -1)
-	}*/
+	}
+	log.Println(line)
 	writer.WriteString(line + "\n")
 	writer.Flush()
 	f.Close()

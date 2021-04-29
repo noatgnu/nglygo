@@ -1,17 +1,18 @@
 package workflow
 
 import (
+	"bufio"
+	"encoding/csv"
+	"fmt"
 	"github.com/noatgnu/ancestral/blastwrapper"
+	"github.com/noatgnu/ancestral/configuration"
+	"io"
 	"log"
 	"os"
-	"encoding/csv"
-	"io"
-	"bufio"
-	"strings"
 	"path/filepath"
-	"strconv"
 	"regexp"
-	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -66,7 +67,9 @@ func LoadQueryTab(filename string) map[string]blastwrapper.PrimeSeq {
 	}
 	qcsv := csv.NewReader(f)
 	qcsv.Comma = '\t'
+	qcsv.LazyQuotes = true
 	header, err := qcsv.Read()
+
 	columns := make(map[string]int)
 	q := make(chan blastwrapper.PrimeSeq)
 	m := make(map[string]blastwrapper.PrimeSeq)
@@ -77,6 +80,7 @@ func LoadQueryTab(filename string) map[string]blastwrapper.PrimeSeq {
 			}
 		}
 	}
+
 	go func() {
 		for {
 			r, err := qcsv.Read()
@@ -88,6 +92,7 @@ func LoadQueryTab(filename string) map[string]blastwrapper.PrimeSeq {
 			s := blastwrapper.PrimeSeq{}
 			s.Id = r[columns["Entry"]]
 			s.Seq = strings.TrimSpace(r[columns["Sequence"]])
+
 			s.Species = r[columns["Organism"]]
 			s.Name = r[columns["Entry name"]]
 			/*length, err := strconv.Atoi(r[columns["Length"]])
@@ -182,14 +187,14 @@ func LoadQuery(filename string) map[string]int {
 }
 
 // Wrapper for Operating Local Blastp and with blast output format 6, using 7 thread and evalue cut off 0.001.
-func BlastOffline(filename string, out string, dbname string, targetNum int) {
+func BlastOffline(filename string, out string, dbname string, targetNum int, cpuCore int, eValue float64) {
 	b := blastwrapper.NcbiBlastpCommandline{}
 	b.Command = `C:\Program Files\NCBI\blast-2.7.1+\bin\blastp.exe`
 	b.DB = dbname
 	b.Out = out
 	b.OutFmt = "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qcovs qcovhsp qcovus"
-	b.NumThreads = 7
-	b.EValue = 0.001
+	b.NumThreads = cpuCore
+	b.EValue = eValue
 	b.Query = filename
 	b.MaxTargetSeqs = targetNum
 	err := b.Execute()
@@ -209,6 +214,7 @@ func CreateMatchesFile(filename string, fmt6q fmt6Query) error {
 	writer := bufio.NewWriter(f)
 	for _, v := range fmt6q.Matches {
 		writer.WriteString(v+"\n")
+		//log.Println(v)
 	}
 	defer writer.Flush()
 	return err
@@ -229,9 +235,9 @@ func CreateBlastDBCMDFile(filename string, c chan fmt6Query) {
 }
 
 // Wrapper for getting sequences from blastdb from sequence ids using blastdbcmd
-func QCFmt6Query(filename string, db string, outFilename string) {
+func QCFmt6Query(filename string, db string, outFilename string, blastcmdPath string) {
 	bc := blastwrapper.BlastDBCMDCommandline{}
-	bc.Command = `C:\Program Files\NCBI\blast-2.7.1+\bin\blastdbcmd.exe`
+	bc.Command =  blastcmdPath
 	bc.DB = db
 	bc.DBType = "prot"
 	bc.In = filename
@@ -243,7 +249,7 @@ func QCFmt6Query(filename string, db string, outFilename string) {
 }
 
 // Blast tabulated OutFmt6 parser. Return a ConcurrentBlastMap object containing quality control filtered blast result.
-func BlastFmt6Parser(filename string, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq, workPool int) ConcurrentBlastMap {
+func BlastFmt6Parser(filename string, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq, workPool int, config configuration.Configuration) ConcurrentBlastMap {
 	log.Printf("Processing Blast FMT6 File %v", filename)
 	fmt6Chan := make(chan fmt6Query)
 
@@ -275,16 +281,21 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 				if fmt6q.Query != "" {
 					fmt6Chan <- fmt6Query{fmt6q.Query, fmt6q.Matches[:]}
 				}
+
 				qMap = make(map[string]bool)
 				fmt6q.Query = r[0]
 				fmt6q.Matches = []string{}
 			}
+
 			pi, err := strconv.ParseFloat(r[2], 32)
 			qcovs, err := strconv.ParseFloat(r[12], 32)
-			if pi > 60 && qcovs >= 80 {
+			//if pi > 60 && qcovs >= 80 {
+			if pi > config.BlastIdentityThreshold && qcovs >= config.BlastCoverageThreshold {
 				if _, ok := qMap[r[1]]; !ok {
 					qMap[r[1]] = true
+					//log.Println(r[1])
 					fmt6q.Matches = append(fmt6q.Matches, r[1])
+
 				}
 			}
 			//fmt6q.Matches = append(fmt6q.Matches, r[1])
@@ -299,9 +310,11 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 	for fmt6 := range fmt6Chan {
 		wg.Add(1)
 		sem <- true
-		log.Println(fmt6.Query)
+		//log.Println(fmt6.Matches)
+		//log.Println(fmt6.Query)
 		go func() {
-			ProcessFMT6Query(fmt6, outDirectory, db, organisms, queryMap, &bm)
+
+			ProcessFMT6Query(fmt6, outDirectory, db, organisms, queryMap, &bm, config)
 			defer func() {
 				<-sem
 			}()
@@ -317,7 +330,7 @@ func BlastFmt6Parser(filename string, outDirectory string, db string, organisms 
 }
 
 // Create fasta file containing sequence with the matched id and filter blast matches sequence id for the correct organism.
-func ProcessFMT6Query(fmt6 fmt6Query, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq, bm *ConcurrentBlastMap) {
+func ProcessFMT6Query(fmt6 fmt6Query, outDirectory string, db string, organisms []string, queryMap map[string]blastwrapper.PrimeSeq, bm *ConcurrentBlastMap, config configuration.Configuration) {
 	log.Printf("Processing %v", fmt6.Query)
 	folderName := strings.Replace(fmt6.Query, "|", "_", -1)
 	compiledMatches := filepath.Join(outDirectory, folderName)
@@ -331,8 +344,9 @@ func ProcessFMT6Query(fmt6 fmt6Query, outDirectory string, db string, organisms 
 		log.Panicln(err)
 	}
 	outName := strings.Replace(fName, "txt", "fasta", -1)
-	QCFmt6Query(fName, db, outName)
-	r, err := FilterMatchFile(organisms, BlastDBCMDResult{fmt6.Query, queryMap[fmt6.Query], outName})
+	QCFmt6Query(fName, db, outName, config.BlastDBCMDPath)
+
+	r, err := FilterMatchFile(organisms, BlastDBCMDResult{fmt6.Query, queryMap[fmt6.Query], outName}, config)
 	if err != nil {
 		log.Println(err)
 	} else {
@@ -342,7 +356,7 @@ func ProcessFMT6Query(fmt6 fmt6Query, outDirectory string, db string, organisms 
 
 // Filtered match ids for only organism of interests and given a numerical id as a workaround for
 // phylip file format limitation.
-func FilterMatchFile(organisms []string, query BlastDBCMDResult) (BlastMap, error) {
+func FilterMatchFile(organisms []string, query BlastDBCMDResult, config configuration.Configuration) (BlastMap, error) {
 	outFile := strings.Replace(query.Filename, ".fasta", ".filtered.fasta", -1)
 	matchFile, err := os.Open(query.Filename)
 	if err != nil {
@@ -368,18 +382,22 @@ func FilterMatchFile(organisms []string, query BlastDBCMDResult) (BlastMap, erro
 	result.SourceSeq = query.Seq
 	o := append([]string(nil), organisms...)
 	collect := make(map[string]bool)
-	check, left, found := blastwrapper.SeqFilterOrganism(query.Seq, organisms, true, collect)
+	log.Printf("%v organisms",len(o))
+	log.Printf("Processing organisms %v", o)
+	log.Println(query)
+	check, left, found := blastwrapper.SeqFilterOrganism(query.Seq, o, true, collect)
+	log.Println(o)
 	if check {
 		writeOut(count, result, FilterResult{query.Seq, found}, b)
 		result.MatchSourceID = strconv.Itoa(count)
 		count ++
 	}
-	//log.Println(left)
+	log.Println(len(left))
 
 	o = left
-	//log.Println(o)
+	// log.Println(o)
 	c := make(chan FilterResult)
-	go ProcessOrganisms(buff, s, o, query.Seq.Length, c, collect)
+	go ProcessOrganisms(buff, s, o, query.Seq.Length, c, collect, config.HomologLengthMaxProportion)
 
 	for p := range c {
 		writeOut(count, result, p, b)
@@ -417,15 +435,18 @@ func writeOut(count int, result BlastMap, p FilterResult, b *bufio.Writer) {
 
 // Check if sequence length is within 10% boundaries and identify their organism for elimination from the list for this
 // query. Qualified outputs are sent through a channel for further processing.
-func ProcessOrganisms(buff *bufio.Reader, s blastwrapper.PrimeSeq, organisms []string, queryLength int, c chan FilterResult, collect map[string]bool) {
-	bound := queryLength*10/100
+func ProcessOrganisms(buff *bufio.Reader, s blastwrapper.PrimeSeq, organisms []string, queryLength int, c chan FilterResult, collect map[string]bool, lengthCutoffProportion int) {
+	//bound := queryLength*20/100
+	bound := queryLength*lengthCutoffProportion/100
+	//log.Println(organisms)
 	for {
 		r, err := buff.ReadString('\n')
-
+		log.Println(r)
 		if err != nil {
 			if err == io.EOF {
 				if s.Id != "" {
 					qc := blastwrapper.SeqQualityControl(s, true)
+
 					if qc == true {
 						check, left, found := blastwrapper.SeqFilterOrganism(s, organisms, true, collect)
 						if check {
@@ -433,6 +454,7 @@ func ProcessOrganisms(buff *bufio.Reader, s blastwrapper.PrimeSeq, organisms []s
 							if (queryLength - bound) <= l && l <= (queryLength + bound) {
 								c <- FilterResult{s, found}
 								organisms = left
+								log.Printf("%v organisms %v %v", len(organisms), s.Id, s.Species)
 							}
 						}
 					}
@@ -443,16 +465,20 @@ func ProcessOrganisms(buff *bufio.Reader, s blastwrapper.PrimeSeq, organisms []s
 			log.Panicln(err)
 		}
 		if strings.ContainsAny(r, ">") {
+			log.Printf("Sequence id string contain >")
 			if s.Id != "" {
 				qc := blastwrapper.SeqQualityControl(s, true)
 				if qc == true {
+					log.Println(organisms)
 					check, left, found := blastwrapper.SeqFilterOrganism(s, organisms, true, collect)
 					if check {
 						l := len(s.Seq)
+
 						if (queryLength - bound) < l && l < (queryLength + bound) {
 
 							c <- FilterResult{s, found}
 							organisms = left
+							log.Printf("%v organisms %v %v", len(organisms), s.Id, s.Species)
 						}
 					}
 				}

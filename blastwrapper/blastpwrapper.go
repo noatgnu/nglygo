@@ -1,11 +1,11 @@
 package blastwrapper
 
 import (
+	"bytes"
 	"errors"
+	"log"
 	"os/exec"
 	"strconv"
-	"log"
-	"bytes"
 )
 
 type NcbiBlastpCommandline struct {
@@ -29,6 +29,7 @@ func (b *NcbiBlastpCommandline) Execute() (err error) {
 	if commandArray != nil {
 		cmd := exec.Command(commandArray[0], commandArray[1:]...)
 		log.Printf("Started: Performing Blast (%v)", b.Query)
+		log.Println(cmd.Args)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
 		err := cmd.Run()
@@ -77,7 +78,7 @@ func (b *NcbiBlastpCommandline) CommandBuild() (commandArray []string, err error
 	if b.MaxTargetSeqs != 0 {
 		commandArray = append(commandArray, "-max_target_seqs", strconv.Itoa(b.MaxTargetSeqs))
 	}
-
+	commandArray = append(commandArray, "-qcov_hsp_perc", "10")
 	if b.Out != "" {
 		commandArray = append(commandArray, "-out", b.Out)
 	}
@@ -87,5 +88,6 @@ func (b *NcbiBlastpCommandline) CommandBuild() (commandArray []string, err error
 	} else {
 		commandArray = append(commandArray, "-outfmt", `"6 qseqid sgi sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore"`)
 	}
+
 	return commandArray, nil
 }

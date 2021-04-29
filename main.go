@@ -1,28 +1,33 @@
 package main
 
 import (
-	"github.com/noatgnu/ancestral/workflow"
-	"github.com/gorilla/mux"
-	"sync"
-	"os"
-	"strings"
-	"log"
-	"encoding/json"
-	"net/http"
-	"io/ioutil"
-	"path/filepath"
 	"bufio"
-	"io"
-	"github.com/gorilla/handlers"
 	"encoding/csv"
-	"github.com/noatgnu/ancestral/blastwrapper"
+	"encoding/json"
+	"flag"
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
 	"github.com/noatgnu/ancestral/alignio"
-	"strconv"
+	"github.com/noatgnu/ancestral/blastwrapper"
+	"github.com/noatgnu/ancestral/configuration"
+	"github.com/noatgnu/ancestral/workflow"
+	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
+	"sync"
 )
 
 var root = `D:\GoProject\ancestral\result`
 
+
+
+var config = configuration.Configuration{}
 type Response struct {
 	DB []CoreDB   `json:"db"`
 	Query []Query `json:"query"`
@@ -64,47 +69,103 @@ func CreateJSON(blastMap workflow.BlastMap) {
 
 func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println(r.Header)
-	workPool := 6
+	createSequonDB(config)
+}
 
-	speciesFile := `C:\Users\localadmin\GoglandProjects\ancestral\species.txt`
-	outputFolder := `D:\GoProject\ancestral\result\test21`
-	queryInfoFile := `C:\Users\localadmin\GoglandProjects\ancestral\uniprot-glycoprotein.tab`
-	queryFastaFile := `D:\GoProject\ancestral\uniprot-homosapiens.fasta`
-	outputBlast := `D:\GoProject\ancestral\homosapiens1.fasta.blast.tsv`
-	blastDB := `C:\Users\localadmin\GoglandProjects\ancestral\nr_customDB`
-	defaultTree := `C:\Users\localadmin\Downloads\species.nonodename.nwk.txt`
-	f, err := os.Open(defaultTree)
-	if err != nil {
-		log.Panicln(err)
+func createSequonDB(config configuration.Configuration) {
+	workPool := config.CPUCore
+	speciesFile := config.SpeciesFile
+	outputFolder := config.OutputFolder
+	queryInfoFile := config.UniprotTabulatedFile
+	queryFastaFile := config.QueryFastaFile
+	outputBlast := config.OutputBlastFile
+	blastDB := config.BlastDB
+	defaultTree := config.DefaultTree
+
+	//speciesFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\spike_protein.36.species.txt`
+	//outputFolder := `D:\GoProject\ancestral\result\spike_protein.36.retest`
+	//queryInfoFile := `C:\Users\localadmin\Downloads\spike_protein_reviewed.tab`
+	//queryFastaFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\spike.fasta`
+	//outputBlast := `C:\Users\localadmin\PycharmProjects\ancestralplay\spike_protein.36.fasta.blast.tsv`
+	//blastDB := `D:\GoProject\ancestral\spike_protein.36_customDB`
+	//defaultTree := ``
+
+	//speciesFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\hemagglutinin.400.species.txt`
+	//outputFolder := `D:\GoProject\ancestral\result\hemagglutinin.400`
+	//queryInfoFile := `C:\Users\localadmin\Downloads\uniprot-yourlist_M20180208A7434721E10EE6586998A056CCD0537E395F70S.tab`
+	//queryFastaFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\hema.fasta`
+	//outputBlast := `C:\Users\localadmin\PycharmProjects\ancestralplay\hemagglutinin.400.fasta.blast.tsv`
+	//blastDB := `D:\GoProject\ancestral\hemagglutinin.400_customDB`
+	//defaultTree := ``
+
+	//speciesFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\hemagglutinin.sepecies.txt`
+	//outputFolder := `D:\GoProject\ancestral\result\hemagglutinin`
+	//queryInfoFile := `C:\Users\localadmin\Downloads\uniprot-yourlist_M20180208A7434721E10EE6586998A056CCD0537E395F70S.tab`
+	//queryFastaFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\hema.fasta`
+	//outputBlast := `C:\Users\localadmin\PycharmProjects\ancestralplay\hema6.fasta.blast.tsv`
+	//blastDB := `D:\GoProject\ancestral\hemagglutinin_customDB`
+	//defaultTree := ``
+
+	//speciesFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\neuraminidase.sepecies.txt`
+	//outputFolder := `D:\GoProject\ancestral\result\neuraminidase`
+	//queryInfoFile := `C:\Users\localadmin\Downloads\uniprot-yourlist_M20180208A7434721E10EE6586998A056CCD0537E395F70S.tab`
+	//queryFastaFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\neura.fasta`
+	//outputBlast := `C:\Users\localadmin\PycharmProjects\ancestralplay\neura2.fasta.blast.tsv`
+	//blastDB := `D:\GoProject\ancestral\neuraminidase_customDB`
+	//defaultTree := ``
+
+	//speciesFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\spike.protein.species.txt`
+	//outputFolder := `D:\GoProject\ancestral\result\spike.protein`
+	//queryInfoFile := `C:\Users\localadmin\Downloads\spike.protein.with.sequence.tab`
+	//queryFastaFile := `C:\Users\localadmin\Downloads\sequence.txt`
+	//outputBlast := `D:\GoProject\ancestral\spike.protein.fasta.blast.tsv`
+	//blastDB := `D:\GoProject\ancestral\spike.protein_customDB`
+	//defaultTree := ``
+
+	//speciesFile := `C:\Users\localadmin\GoglandProjects\ancestral\species.txt`
+	//outputFolder := `D:\GoProject\ancestral\result\homo.sapiens.muscle.wag`
+	//queryInfoFile := `C:\Users\localadmin\GoglandProjects\ancestral\uniprot-glycoprotein.tab`
+	//queryFastaFile := `D:\GoProject\ancestral\uniprot-homosapiens.fasta`
+	//outputBlast := `D:\GoProject\ancestral\homosapiens1.fasta.blast.tsv`
+	//blastDB := `C:\Users\localadmin\GoglandProjects\ancestral\nr_customDB`
+	//defaultTree := `C:\Users\localadmin\Downloads\species.nonodename.nwk.txt`
+	if defaultTree != "" {
+		f, err := os.Open(defaultTree)
+		if err != nil {
+			log.Panicln(err)
+		}
+
+		reader := bufio.NewReader(f)
+		defaultTree, err = reader.ReadString('\n')
+		if err != nil {
+			log.Panicln(err)
+		}
+		f.Close()
 	}
-	reader := bufio.NewReader(f)
-	defaultTree, err = reader.ReadString('\n')
-	if err != nil {
-		log.Panicln(err)
-	}
-	f.Close()
+
+
 	/*speciesFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.species.txt`
 	outputFolder := `D:\GoProject\ancestral\result\test15`
 	queryInfoFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.query`
 	queryFastaFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.fasta`
 	outputBlast := `D:\GoProject\ancestral\germin.fasta.blast.tsv`
 	blastDB := `D:\GoProject\ancestral\germin_customDB`*/
-/*	speciesFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\neuraminidase.sepecies.txt`
-	outputFolder := `D:\GoProject\ancestral\result\test7`
-	queryInfoFile := `C:\Users\localadmin\Downloads\uniprot-yourlist_M20180208A7434721E10EE6586998A056CCD0537E395F70S.tab`
-	queryFastaFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\neura.fasta`
-	outputBlast := `C:\Users\localadmin\PycharmProjects\ancestralplay\neura.fasta.blast.tsv`
-	blastDB := `D:\GoProject\ancestral\neuraminidase_customDB`
-*/
+	/*	speciesFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\neuraminidase.sepecies.txt`
+		outputFolder := `D:\GoProject\ancestral\result\test7`
+		queryInfoFile := `C:\Users\localadmin\Downloads\uniprot-yourlist_M20180208A7434721E10EE6586998A056CCD0537E395F70S.tab`
+		queryFastaFile := `C:\Users\localadmin\PycharmProjects\ancestralplay\neura.fasta`
+		outputBlast := `C:\Users\localadmin\PycharmProjects\ancestralplay\neura.fasta.blast.tsv`
+		blastDB := `D:\GoProject\ancestral\neuraminidase_customDB`
+	*/
 	os.MkdirAll(outputFolder, os.ModePerm)
 	query := workflow.LoadQueryTab(queryInfoFile)
-	targetNum := 500
+	targetNum := config.BlastTargetNumber
 	if _, err := os.Stat(outputBlast); os.IsNotExist(err) {
-		workflow.BlastOffline(queryFastaFile, outputBlast, blastDB, targetNum)
+		workflow.BlastOffline(queryFastaFile, outputBlast, blastDB, targetNum, config.CPUCore-1, config.BlastEvalue)
 	}
 
 	s := workflow.GetSpeciesList(speciesFile)
-
+	log.Println(s)
 	asr := true
 	bm := workflow.ConcurrentBlastMap{}
 	work := filepath.Join(outputFolder, "work.json")
@@ -114,7 +175,7 @@ func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println(err)
 		}
 
-		bm = workflow.BlastFmt6Parser(outputBlast,outputFolder, blastDB, s, query, workPool)
+		bm = workflow.BlastFmt6Parser(outputBlast, outputFolder, blastDB, s, query, workPool, config)
 		encoder := json.NewEncoder(f)
 		encoder.Encode(bm)
 		f.Close()
@@ -142,12 +203,12 @@ func CreateDBHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		wg.Add(1)
 		sem <- true
-		count ++
+		count++
 		log.Println(count)
 		go func() {
-			workflow.ProcessAlignment(v, asr, defaultTree)
+			workflow.ProcessAlignment(v, asr, defaultTree, config)
 			defer func() {
-				<- sem
+				<-sem
 			}()
 			wg.Done()
 		}()
@@ -162,14 +223,24 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 
 func MakeBlastDBHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		f := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.fasta`
-		fo := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.fasta_filtered`
-		s := `C:\Users\localadmin\PycharmProjects\ancestralplay\germin.species.txt`
-		workflow.PreProcessDB(f, fo, s)
-		log.Println(f, fo, s)
-		o := `D:\GoProject\ancestral\germin_customDB`
-		workflow.CreateCustomDB(fo, o)
+		//f := `C:\Users\localadmin\PycharmProjects\ancestralplay\spike.protein.fasta`
+		//fo := `C:\Users\localadmin\PycharmProjects\ancestralplay\spike.protein.fasta_filtered`
+		//s := `C:\Users\localadmin\PycharmProjects\ancestralplay\spike.protein.species.txt`
+		//f := `C:\Users\localadmin\PycharmProjects\ancestralplay\spike_protein.36.fasta`
+		//fo := `C:\Users\localadmin\PycharmProjects\ancestralplay\spike_protein.36.fasta_filtered`
+		//s := `C:\Users\localadmin\PycharmProjects\ancestralplay\spike_protein.36.species.txt`
+		makedb(config)
 	}
+}
+
+func makedb(config configuration.Configuration) {
+	f := config.MakeBlastDBInputFasta
+	fo := config.MakeBlastDBOutputFilteredFasta
+	s := config.SpeciesFile
+	workflow.PreProcessDB(f, fo, s)
+	log.Println(f, fo, s)
+	o := config.MakeBlastDBPath
+	workflow.CreateCustomDB(fo, o)
 }
 
 func BlastPHandler(w http.ResponseWriter, r *http.Request){
@@ -428,17 +499,44 @@ func init() {
 }
 
 func main() {
-	headersOk := handlers.AllowedHeaders([]string{"X-Requested-With"})
-	originsOk := handlers.AllowedOrigins([]string{"*"})
-	methodsOk := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS"})
-	r := mux.NewRouter()
-	r.HandleFunc("/", HomeHandler)
-	r.HandleFunc(`/db/`, GetDBListHandler)
-	r.HandleFunc(`/db/{db}`, GetAllQueryHandler)
-	r.HandleFunc(`/query/{db}/{id}`, GetQueryHandler)
-	r.HandleFunc(`/create`, CreateDBHandler)
-	r.HandleFunc(`/makeblastdb`, MakeBlastDBHandler)
-	r.HandleFunc(`/blastp`, BlastPHandler)
-	//http.Handle("/", r)
-	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(originsOk, headersOk, methodsOk)(r)))
+
+	webFlag := flag.Bool("w", false, "Activate webserver")
+	mkdbFlag := flag.Bool("m", false, "Create Blastp DB")
+	createSequonDFlag := flag.Bool("c", false, "Create sequon DB")
+	settingsJsonFile := flag.String("config", "config.json", "Configuration file path")
+	flag.Parse()
+	f, err := os.Open(*settingsJsonFile)
+	if err != nil {
+		log.Panicln(err)
+	}
+	decoder := json.NewDecoder(f)
+	decoder.Decode(&config)
+
+
+
+	if *mkdbFlag {
+		makedb(config)
+	}
+
+	if *createSequonDFlag {
+		createSequonDB(config)
+	}
+
+	if *webFlag {
+		headersOk := handlers.AllowedHeaders([]string{"X-Requested-With"})
+		originsOk := handlers.AllowedOrigins([]string{"*"})
+		methodsOk := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS"})
+		r := mux.NewRouter()
+		r.HandleFunc("/", HomeHandler)
+		r.HandleFunc(`/db/`, GetDBListHandler)
+		r.HandleFunc(`/db/{db}`, GetAllQueryHandler)
+		r.HandleFunc(`/query/{db}/{id}`, GetQueryHandler)
+		r.HandleFunc(`/create`, CreateDBHandler)
+		r.HandleFunc(`/makeblastdb`, MakeBlastDBHandler)
+		r.HandleFunc(`/blastp`, BlastPHandler)
+		//http.Handle("/", r)
+		log.Fatal(http.ListenAndServe(":"+strconv.Itoa(config.ServerPort), handlers.CORS(originsOk, headersOk, methodsOk)(r)))
+	}
+
+
 }
