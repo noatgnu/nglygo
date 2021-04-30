@@ -60,4 +60,4 @@ For `-s` parameter to work:
 2. `SpeciesFile` is a text find where the name of the species could be found separated by newlines.
 3. `OutputFolder` output folder for the analysis. Each subfolder one level down from this folder is the result from each query of the Blastp operation.
 4. `UniprotTabulatedFile` tabulated file download from Uniprot containing Uniprot accession ID, species name, entry name, sequence, and topological domain
-
+5. 
